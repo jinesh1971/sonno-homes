@@ -75,6 +75,38 @@ const TOTAL_INVESTED = INVESTOR_DATA.reduce((s, i) => s + i.invested, 0);
 const TOTAL_DISTRIBUTED = INVESTOR_DATA.reduce((s, i) => s + i.totalDistributed, 0);
 const AVG_ROI = INVESTOR_DATA.reduce((s, i) => s + i.roiPct, 0) / INVESTOR_DATA.length;
 
+// ── DUMMY PERFORMANCE REPORTS ────────────────────────────────────────────────
+const INITIAL_REPORTS = [
+  { id: 1, propertyId: 1, period: "Jan 2026", periodStart: "2026-01-01", periodEnd: "2026-01-31", nightsBooked: 28, nightsAvailable: 31, grossRevenue: 8400, expenses: [
+    { category: "Rent", amount: 1200 }, { category: "Cleaning", amount: 560 }, { category: "Utilities", amount: 320 }, { category: "Maintenance", amount: 180 }, { category: "Platform Fees", amount: 420 },
+  ], status: "Published", createdBy: "Sonno Admin", createdAt: "2026-02-03" },
+  { id: 2, propertyId: 1, period: "Dec 2025", periodStart: "2025-12-01", periodEnd: "2025-12-31", nightsBooked: 26, nightsAvailable: 31, grossRevenue: 9100, expenses: [
+    { category: "Rent", amount: 1200 }, { category: "Cleaning", amount: 520 }, { category: "Utilities", amount: 380 }, { category: "Maintenance", amount: 0 }, { category: "Platform Fees", amount: 455 },
+  ], status: "Published", createdBy: "Sonno Admin", createdAt: "2026-01-04" },
+  { id: 3, propertyId: 2, period: "Jan 2026", periodStart: "2026-01-01", periodEnd: "2026-01-31", nightsBooked: 22, nightsAvailable: 31, grossRevenue: 6600, expenses: [
+    { category: "Rent", amount: 1000 }, { category: "Cleaning", amount: 440 }, { category: "Utilities", amount: 280 }, { category: "Maintenance", amount: 350 },
+  ], status: "Published", createdBy: "Sonno Admin", createdAt: "2026-02-05" },
+  { id: 4, propertyId: 3, period: "Jan 2026", periodStart: "2026-01-01", periodEnd: "2026-01-31", nightsBooked: 30, nightsAvailable: 31, grossRevenue: 7200, expenses: [
+    { category: "Rent", amount: 900 }, { category: "Cleaning", amount: 600 }, { category: "Utilities", amount: 250 }, { category: "Platform Fees", amount: 360 },
+  ], status: "Published", createdBy: "Sonno Admin", createdAt: "2026-02-02" },
+  { id: 5, propertyId: 5, period: "Jan 2026", periodStart: "2026-01-01", periodEnd: "2026-01-31", nightsBooked: 25, nightsAvailable: 31, grossRevenue: 5000, expenses: [
+    { category: "Rent", amount: 800 }, { category: "Cleaning", amount: 375 }, { category: "Utilities", amount: 200 },
+  ], status: "Draft", createdBy: "Sonno Admin", createdAt: "2026-02-08" },
+  { id: 6, propertyId: 4, period: "Jan 2026", periodStart: "2026-01-01", periodEnd: "2026-01-31", nightsBooked: 27, nightsAvailable: 31, grossRevenue: 5400, expenses: [
+    { category: "Rent", amount: 700 }, { category: "Cleaning", amount: 405 }, { category: "Utilities", amount: 190 }, { category: "Maintenance", amount: 120 },
+  ], status: "Published", createdBy: "Sonno Admin", createdAt: "2026-02-04" },
+].map(r => {
+  const totalExpenses = r.expenses.reduce((s, e) => s + e.amount, 0);
+  const grossProfit = r.grossRevenue - totalExpenses;
+  const managementFee = Math.round(grossProfit * 0.20);
+  const netProfit = grossProfit - managementFee;
+  const occupancy = Math.round((r.nightsBooked / r.nightsAvailable) * 100);
+  return { ...r, totalExpenses, grossProfit, managementFee, netProfit, occupancy };
+});
+
+// Mutable reference — will be replaced by React state in SonnoHomes
+let PERFORMANCE_REPORTS = [...INITIAL_REPORTS];
+
 // ── PALETTE ──────────────────────────────────────────────────────────────────
 const C = {
   bg: "#F4F2EE",
@@ -268,9 +300,25 @@ export default function SonnoHomes() {
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [selectedInvestor, setSelectedInvestor] = useState(null);
+  const [selectedProperty, setSelectedProperty] = useState(null);
   const [notifications, setNotifications] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
   const [investorLogin] = useState(INVESTOR_DATA[0]); // demo: first investor
+  const [reports, setReports] = useState(INITIAL_REPORTS);
+
+  // Keep module-level reference in sync for components that read it directly
+  useEffect(() => { PERFORMANCE_REPORTS = reports; }, [reports]);
+
+  const addReport = (report) => {
+    const newReport = {
+      ...report,
+      id: reports.length + 1,
+      status: "Published",
+      createdBy: "Sonno Admin",
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+    setReports(prev => [newReport, ...prev]);
+  };
 
   useEffect(() => {
     const link = document.createElement("link");
@@ -293,6 +341,7 @@ export default function SonnoHomes() {
     { id: "investors", label: "Investors", icon: "◉" },
     { id: "properties", label: "Properties", icon: "⊞" },
     { id: "distributions", label: "Distributions", icon: "◈" },
+    { id: "create-report", label: "Create Report", icon: "📋" },
     { id: "reports", label: "Reports & Export", icon: "▤" },
     { id: "settings", label: "Settings", icon: "⚙" },
   ];
@@ -340,7 +389,7 @@ export default function SonnoHomes() {
 
         <nav style={{ flex: 1, padding: "12px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
           {nav.map(item => (
-            <button key={item.id} onClick={() => { setPage(item.id); setSelectedInvestor(null); }}
+            <button key={item.id} onClick={() => { setPage(item.id); setSelectedInvestor(null); setSelectedProperty(null); }}
               style={{
                 display: "flex", alignItems: "center", gap: 12,
                 padding: collapsed ? "11px" : "10px 14px", borderRadius: 9,
@@ -411,12 +460,13 @@ export default function SonnoHomes() {
             {view === "admin" && page === "investors" && <AdminInvestors selected={selectedInvestor} onSelect={setSelectedInvestor} />}
             {view === "admin" && page === "properties" && <AdminProperties />}
             {view === "admin" && page === "distributions" && <AdminDistributions />}
+            {view === "admin" && page === "create-report" && <AdminCreateReport reports={reports} onAddReport={addReport} />}
             {view === "admin" && page === "reports" && <AdminReports />}
             {view === "admin" && page === "settings" && <AdminSettings />}
-            {view === "investor" && page === "overview" && <InvestorOverview investor={investorLogin} />}
+            {view === "investor" && page === "overview" && <InvestorOverview investor={investorLogin} onViewProperty={p => { setSelectedProperty(p); setPage("properties"); }} reports={reports} />}
             {view === "investor" && page === "distributions" && <InvestorDistributions investor={investorLogin} />}
-            {view === "investor" && page === "properties" && <InvestorProperties investor={investorLogin} />}
-            {view === "investor" && page === "documents" && <InvestorDocuments />}
+            {view === "investor" && page === "properties" && <InvestorProperties investor={investorLogin} selectedProperty={selectedProperty} onSelectProperty={setSelectedProperty} reports={reports} />}
+            {view === "investor" && page === "documents" && <InvestorDocuments investor={investorLogin} reports={reports} />}
             {view === "investor" && page === "profile" && <InvestorProfile investor={investorLogin} />}
           </div>
         </div>
@@ -768,6 +818,261 @@ function AdminReports() {
   );
 }
 
+// ── ADMIN CREATE REPORT ──────────────────────────────────────────────────────
+function AdminCreateReport({ reports, onAddReport }) {
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [period, setPeriod] = useState("2026-02");
+  const [nightsBooked, setNightsBooked] = useState("");
+  const [nightsAvailable, setNightsAvailable] = useState("28");
+  const [grossRevenue, setGrossRevenue] = useState("");
+  const [expenses, setExpenses] = useState([{ category: "Rent", amount: "" }, { category: "Cleaning", amount: "" }, { category: "Utilities", amount: "" }]);
+  const [generated, setGenerated] = useState(null);
+  const [viewingReport, setViewingReport] = useState(null);
+
+  const addExpense = () => setExpenses([...expenses, { category: "", amount: "" }]);
+  const removeExpense = (idx) => setExpenses(expenses.filter((_, i) => i !== idx));
+  const updateExpense = (idx, field, val) => setExpenses(expenses.map((e, i) => i === idx ? { ...e, [field]: val } : e));
+
+  const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const grossProfit = (parseFloat(grossRevenue) || 0) - totalExpenses;
+  const managementFee = Math.round(grossProfit * 0.20);
+  const netProfit = grossProfit - managementFee;
+
+  const handleGenerate = () => {
+    const prop = PROPERTIES.find(p => p.id === parseInt(selectedPropertyId));
+    if (!prop) return;
+    const investorsLinked = INVESTOR_DATA.filter(i => i.propertyIds.includes(prop.id));
+    const periodLabel = new Date(period + "-01").toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const validExpenses = expenses.filter(e => e.category && e.amount).map(e => ({ category: e.category, amount: parseFloat(e.amount) || 0 }));
+    const nb = parseInt(nightsBooked) || 0;
+    const na = parseInt(nightsAvailable) || 28;
+    const gr = parseFloat(grossRevenue) || 0;
+    const te = validExpenses.reduce((s, e) => s + e.amount, 0);
+    const gp = gr - te;
+    const mf = Math.round(gp * 0.20);
+    const np = gp - mf;
+    const occ = Math.round((nb / na) * 100);
+
+    const newReport = {
+      propertyId: prop.id, period: periodLabel, periodStart: period + "-01", periodEnd: period + "-28",
+      nightsBooked: nb, nightsAvailable: na, grossRevenue: gr, expenses: validExpenses,
+      totalExpenses: te, grossProfit: gp, managementFee: mf, netProfit: np, occupancy: occ,
+    };
+    onAddReport(newReport);
+
+    setGenerated({
+      property: prop, period: periodLabel, nightsBooked: nb, nightsAvailable: na,
+      grossRevenue: gr, expenses: validExpenses,
+      totalExpenses: te, grossProfit: gp, managementFee: mf, netProfit: np, investorsLinked, occupancy: occ,
+    });
+  };
+
+  // View existing report detail
+  if (viewingReport) {
+    const r = viewingReport;
+    const prop = PROPERTIES.find(p => p.id === r.propertyId);
+    const investorsLinked = INVESTOR_DATA.filter(i => i.propertyIds.includes(r.propertyId));
+    return (
+      <>
+        <button onClick={() => setViewingReport(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: C.accent, fontWeight: 600, marginBottom: 18, fontFamily: FONT }}>← Back to Reports</button>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, marginBottom: 24 }}>
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{prop?.name} — {r.period}</div>
+                <div style={{ fontSize: 12, color: C.textMid, marginTop: 4 }}>{prop?.location} · Generated {r.createdAt}</div>
+              </div>
+              <Badge label={r.status} variant={r.status === "Published" ? "green" : "orange"} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+              {[
+                { label: "Nights Booked", value: `${r.nightsBooked} / ${r.nightsAvailable}` },
+                { label: "Occupancy", value: `${r.occupancy}%` },
+                { label: "Gross Revenue", value: euro(r.grossRevenue) },
+                { label: "Net to Investors", value: euro(r.netProfit), color: C.green },
+              ].map(s => (
+                <div key={s.label} style={{ padding: 14, background: C.warm, borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{s.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: s.color || C.dark, fontFamily: DISPLAY }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 12 }}>Expense Breakdown</div>
+            {r.expenses.map((e, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < r.expenses.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 13, color: C.text }}>{e.category}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{euro(e.amount)}</span>
+              </div>
+            ))}
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", marginTop: 8, borderTop: `2px solid ${C.border}` }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.dark }}>Total Expenses</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.red }}>{euro(r.totalExpenses)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}>
+              <span style={{ fontSize: 13, color: C.text }}>Gross Profit</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{euro(r.grossProfit)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}>
+              <span style={{ fontSize: 13, color: C.text }}>Sonno Homes Fee (20%)</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.accent }}>{euro(r.managementFee)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: `2px solid ${C.border}`, marginTop: 4 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>Net Profit to Investors</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: C.green }}>{euro(r.netProfit)}</span>
+            </div>
+          </Card>
+          <Card>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 14 }}>Shared With Investors</div>
+            <div style={{ fontSize: 11, color: C.textMid, marginBottom: 14 }}>This report is visible to all investors linked to {prop?.name}</div>
+            {investorsLinked.map(inv => (
+              <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: `${C.accent}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: C.accent }}>{inv.name.split(" ").map(n => n[0]).join("")}</div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>{inv.name}</div>
+                  <div style={{ fontSize: 10, color: C.textLight }}>{inv.email}</div>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 16, marginBottom: 24 }}>
+        {/* Create Report Form */}
+        <Card>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 4 }}>Create Performance Report</div>
+          <div style={{ fontSize: 12, color: C.textMid, marginBottom: 20 }}>Select a property, enter the period data, and generate a report for investors</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Property</div>
+              <select value={selectedPropertyId} onChange={e => setSelectedPropertyId(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, appearance: "auto" }}>
+                <option value="">Select property...</option>
+                {PROPERTIES.map(p => <option key={p.id} value={p.id}>{p.img} {p.name} — {p.location}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Reporting Period</div>
+              <input type="month" value={period} onChange={e => setPeriod(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Nights Booked</div>
+              <input type="number" placeholder="e.g. 28" value={nightsBooked} onChange={e => setNightsBooked(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Nights Available</div>
+              <input type="number" placeholder="e.g. 31" value={nightsAvailable} onChange={e => setNightsAvailable(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Gross Revenue</div>
+              <input type="number" placeholder="e.g. 8400" value={grossRevenue} onChange={e => setGrossRevenue(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>Expenses</div>
+            <button onClick={addExpense} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT, color: C.accent }}>+ Add Line Item</button>
+          </div>
+          {expenses.map((exp, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "center" }}>
+              <input placeholder="Category (e.g. Rent)" value={exp.category} onChange={e => updateExpense(i, "category", e.target.value)} style={{ flex: 2, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm }} />
+              <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateExpense(i, "amount", e.target.value)} style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm }} />
+              {expenses.length > 1 && <button onClick={() => removeExpense(i)} style={{ width: 32, height: 32, borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 14, color: C.red, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>}
+            </div>
+          ))}
+
+          <button onClick={handleGenerate} disabled={!selectedPropertyId || !grossRevenue} style={{ marginTop: 18, padding: "10px 28px", borderRadius: 9, border: "none", background: !selectedPropertyId || !grossRevenue ? C.border : C.accent, color: "#fff", cursor: !selectedPropertyId || !grossRevenue ? "default" : "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+            Generate Report
+          </button>
+        </Card>
+
+        {/* Live Preview */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Card>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 14 }}>Live Calculation</div>
+            {[
+              { label: "Gross Revenue", value: euro(parseFloat(grossRevenue) || 0), color: C.dark },
+              { label: "Total Expenses", value: euro(totalExpenses), color: C.red },
+              { label: "Gross Profit", value: euro(grossProfit), color: grossProfit >= 0 ? C.dark : C.red },
+              { label: "Sonno Fee (20%)", value: euro(managementFee), color: C.accent },
+              { label: "Net to Investors", value: euro(netProfit), color: C.green },
+            ].map((s, i) => (
+              <div key={s.label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
+                <span style={{ fontSize: 13, color: C.textMid }}>{s.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.value}</span>
+              </div>
+            ))}
+          </Card>
+          {selectedPropertyId && (
+            <Card>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 10 }}>Will Be Shared With</div>
+              <div style={{ fontSize: 11, color: C.textMid, marginBottom: 10 }}>Investors linked to this property</div>
+              {INVESTOR_DATA.filter(i => i.propertyIds.includes(parseInt(selectedPropertyId))).map(inv => (
+                <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 7, background: `${C.accent}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: C.accent }}>{inv.name.split(" ").map(n => n[0]).join("")}</div>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: C.dark }}>{inv.name}</span>
+                </div>
+              ))}
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Generated Report Confirmation */}
+      {generated && (
+        <Card style={{ borderColor: C.green, background: `${C.greenBg}44` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <span style={{ fontSize: 24 }}>✅</span>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.green }}>Report Generated Successfully</div>
+              <div style={{ fontSize: 12, color: C.textMid }}>{generated.property.name} — {generated.period} · Shared with {generated.investorsLinked.length} investor(s)</div>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+            {[
+              { label: "Nights", value: `${generated.nightsBooked}/${generated.nightsAvailable}` },
+              { label: "Occupancy", value: `${generated.occupancy}%` },
+              { label: "Revenue", value: euro(generated.grossRevenue) },
+              { label: "Sonno Fee", value: euro(generated.managementFee) },
+              { label: "Net to Investors", value: euro(generated.netProfit) },
+            ].map(s => (
+              <div key={s.label} style={{ padding: 10, background: C.white, borderRadius: 8 }}>
+                <div style={{ fontSize: 9.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{s.label}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Existing Reports Table */}
+      <Card style={{ marginTop: 24, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>Generated Reports</div>
+          <div style={{ fontSize: 11, color: C.textMid, marginTop: 2 }}>Click any report to view details</div>
+        </div>
+        <SortableTable
+          columns={[
+            { key: "propertyId", label: "Property", render: r => { const p = PROPERTIES.find(pp => pp.id === r.propertyId); return <span style={{ fontWeight: 600, color: C.dark }}>{p?.img} {p?.name}</span>; } },
+            { key: "period", label: "Period" },
+            { key: "occupancy", label: "Occupancy", render: r => <span style={{ fontWeight: 600 }}>{r.occupancy}%</span> },
+            { key: "grossRevenue", label: "Revenue", render: r => <span style={{ fontWeight: 600 }}>{euro(r.grossRevenue)}</span> },
+            { key: "netProfit", label: "Net to Investors", render: r => <span style={{ fontWeight: 600, color: C.green }}>{euro(r.netProfit)}</span> },
+            { key: "status", label: "Status", render: r => <Badge label={r.status} variant={r.status === "Published" ? "green" : "orange"} /> },
+            { key: "createdAt", label: "Created" },
+          ]}
+          data={reports}
+          onRowClick={setViewingReport}
+        />
+      </Card>
+    </>
+  );
+}
+
 function AdminSettings() {
   return (
     <>
@@ -831,11 +1136,33 @@ function AdminSettings() {
 // INVESTOR PAGES
 // ═════════════════════════════════════════════════════════════════════════════
 
-function InvestorOverview({ investor }) {
+function InvestorOverview({ investor, onViewProperty, reports }) {
   const inv = INVESTOR_DATA.find(i => i.id === investor.id) || INVESTOR_DATA[0];
   const recentDists = inv.distributions.slice(-12);
   const bestMonth = [...inv.distributions].sort((a, b) => b.amount - a.amount)[0];
   const breakeven = inv.distributions.findIndex((d, idx) => inv.distributions.slice(0, idx + 1).reduce((s, dd) => s + dd.amount, 0) >= inv.invested);
+  const avgMonthly = inv.totalDistributed / inv.monthsActive;
+  const remaining = inv.invested - inv.totalDistributed;
+  const monthsToRecoup = remaining > 0 ? Math.ceil(remaining / avgMonthly) : 0;
+
+  // Allocation data for pie chart
+  const propCount = inv.propertyIds.length;
+  const perPropInvested = inv.invested / propCount;
+  const allocations = inv.propertyIds.map(pid => {
+    const p = PROPERTIES.find(pp => pp.id === pid);
+    return { name: p?.name || "Unknown", amount: perPropInvested, pct: (1 / propCount) * 100, color: p?.img };
+  });
+
+  // Per-property ROI (simulated — distribute total evenly for demo)
+  const perPropDist = inv.totalDistributed / propCount;
+  const propertyROIs = inv.propertyIds.map(pid => {
+    const p = PROPERTIES.find(pp => pp.id === pid);
+    const roi = (perPropDist / perPropInvested) * 100;
+    return { name: p?.name || "Unknown", roi, img: p?.img };
+  });
+
+  // Pie chart colors
+  const PIE_COLORS = ["#B8854F", "#2E7D4F", "#2563EB", "#C0392B", "#7C3AED", "#D97706", "#059669", "#DC2626", "#4F46E5", "#0891B2"];
   
   return (
     <>
@@ -848,7 +1175,7 @@ function InvestorOverview({ investor }) {
         <KPICard label="My Investment" value={euro(inv.invested)} icon="💰" />
         <KPICard label="Total Received" value={euro(inv.totalDistributed)} sub={`${pct(inv.roiPct)} of investment returned`} trend="up" icon="📤" />
         <KPICard label="Best Month" value={bestMonth ? euro(bestMonth.amount) : "—"} sub={bestMonth ? bestMonth.date : ""} icon="⭐" />
-        <KPICard label="Contract Remaining" value={`${inv.monthsRemaining} months`} sub={`${inv.monthsActive}/60 months completed`} icon="📅" />
+        <KPICard label="Time to Recoup" value={inv.roiPct >= 100 ? "Recouped" : `~${monthsToRecoup} months`} sub={inv.roiPct >= 100 ? `Reached at month ${breakeven + 1}` : `${inv.monthsRemaining}mo left on contract`} trend={inv.roiPct >= 100 ? "up" : undefined} icon="⏱️" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 16, marginBottom: 24 }}>
@@ -871,14 +1198,81 @@ function InvestorOverview({ investor }) {
         </Card>
       </div>
 
+      {/* NEW: Allocation Pie Chart + ROI Tracker */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <Card>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark, marginBottom: 16 }}>Investment Allocation</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+            {/* SVG Pie Chart */}
+            <svg viewBox="0 0 120 120" style={{ width: 140, height: 140, flexShrink: 0 }}>
+              {allocations.reduce((acc, slice, i) => {
+                const startAngle = acc.angle;
+                const sliceAngle = (slice.pct / 100) * 360;
+                const endAngle = startAngle + sliceAngle;
+                const largeArc = sliceAngle > 180 ? 1 : 0;
+                const rad = (a) => (a - 90) * (Math.PI / 180);
+                const x1 = 60 + 50 * Math.cos(rad(startAngle));
+                const y1 = 60 + 50 * Math.sin(rad(startAngle));
+                const x2 = 60 + 50 * Math.cos(rad(endAngle));
+                const y2 = 60 + 50 * Math.sin(rad(endAngle));
+                const path = propCount === 1
+                  ? <circle key={i} cx="60" cy="60" r="50" fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  : <path key={i} d={`M60,60 L${x1},${y1} A50,50 0 ${largeArc},1 ${x2},${y2} Z`} fill={PIE_COLORS[i % PIE_COLORS.length]} />;
+                acc.paths.push(path);
+                acc.angle = endAngle;
+                return acc;
+              }, { paths: [], angle: 0 }).paths}
+              <circle cx="60" cy="60" r="28" fill={C.card} />
+              <text x="60" y="57" textAnchor="middle" style={{ fontSize: 11, fontWeight: 700, fill: C.dark }}>{propCount}</text>
+              <text x="60" y="70" textAnchor="middle" style={{ fontSize: 7, fill: C.textLight }}>properties</text>
+            </svg>
+            <div style={{ flex: 1 }}>
+              {allocations.map((a, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: i < allocations.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, fontWeight: 500, color: C.dark }}>{a.name}</span>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: C.dark }}>{euro(a.amount)}</span>
+                    <span style={{ fontSize: 10, color: C.textLight, marginLeft: 6 }}>{pct(a.pct)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark, marginBottom: 16 }}>ROI by Property</div>
+          {propertyROIs.map((pr, i) => (
+            <div key={i} style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
+                <span style={{ fontWeight: 600, color: C.dark }}>{pr.img} {pr.name}</span>
+                <span style={{ fontWeight: 700, color: pr.roi >= 100 ? C.green : C.accent }}>{pct(pr.roi)}</span>
+              </div>
+              <div style={{ height: 8, background: C.border, borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.min(pr.roi, 200) / 2}%`, background: pr.roi >= 100 ? `linear-gradient(90deg, ${C.green}, #34D399)` : `linear-gradient(90deg, ${C.accent}, ${C.accentSoft})`, borderRadius: 4, transition: "width 0.8s ease" }} />
+              </div>
+            </div>
+          ))}
+          <div style={{ marginTop: 16, padding: 12, background: C.warm, borderRadius: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Overall ROI</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: inv.roiPct >= 100 ? C.green : C.accent, fontFamily: DISPLAY }}>{pct(inv.roiPct)}</div>
+          </div>
+        </Card>
+      </div>
+
       <Card>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.dark, marginBottom: 4 }}>Your Properties</div>
-        <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Properties linked to your investment</div>
+        <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Click a property to view distributions and performance reports</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           {inv.propertyIds.map(pid => {
             const p = PROPERTIES.find(pp => pp.id === pid);
             return p ? (
-              <div key={p.id} style={{ padding: 16, background: C.warm, borderRadius: 12 }}>
+              <div key={p.id} onClick={() => onViewProperty && onViewProperty(p)} style={{ padding: 16, background: C.warm, borderRadius: 12, cursor: "pointer", transition: "all 0.2s" }}
+                onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.transform = "none"; }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 24 }}>{p.img}</span>
                   <div>
@@ -886,7 +1280,10 @@ function InvestorOverview({ investor }) {
                     <div style={{ fontSize: 11, color: C.textMid }}>{p.location}</div>
                   </div>
                 </div>
-                <Badge label={p.status} variant={p.status === "Active" ? "green" : "orange"} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Badge label={p.status} variant={p.status === "Active" ? "green" : "orange"} />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: C.accent }}>View Details →</span>
+                </div>
               </div>
             ) : null;
           })}
@@ -988,16 +1385,112 @@ function InvestorDistributions({ investor }) {
   );
 }
 
-function InvestorProperties({ investor }) {
+function InvestorProperties({ investor, selectedProperty, onSelectProperty, reports }) {
   const inv = INVESTOR_DATA.find(i => i.id === investor.id) || INVESTOR_DATA[0];
+
+  // Property Detail View
+  if (selectedProperty) {
+    const p = selectedProperty;
+    const propReports = reports.filter(r => r.propertyId === p.id && r.status === "Published");
+    const propDists = inv.distributions.slice(-12); // simulated per-property distributions
+    const perPropInvested = inv.invested / inv.propertyIds.length;
+    const perPropDist = inv.totalDistributed / inv.propertyIds.length;
+    const propROI = (perPropDist / perPropInvested) * 100;
+
+    return (
+      <>
+        <button onClick={() => onSelectProperty(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: C.accent, fontWeight: 600, marginBottom: 18, fontFamily: FONT }}>← Back to My Properties</button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: C.warm, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36 }}>{p.img}</div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{p.name}</div>
+            <div style={{ fontSize: 13, color: C.textMid }}>{p.location} · {p.type} · {p.bedrooms} bedrooms</div>
+          </div>
+          <Badge label={p.status} variant={p.status === "Active" ? "green" : "orange"} />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+          <KPICard label="My Investment" value={euro(perPropInvested)} icon="💰" />
+          <KPICard label="Distributed" value={euro(perPropDist)} sub={`${pct(propROI)} ROI`} trend="up" icon="📤" />
+          <KPICard label="Occupancy" value={propReports.length > 0 ? `${propReports[0].occupancy}%` : `~${Math.round(85 + Math.random() * 10)}%`} icon="🏠" />
+          <KPICard label="Monthly Yield" value={`~${p.monthlyYield}%`} icon="📊" />
+        </div>
+
+        {/* Performance Reports */}
+        <Card style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark, marginBottom: 4 }}>Performance Reports</div>
+          <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Monthly reports generated by Sonno Homes for this property</div>
+          {propReports.length === 0 ? (
+            <div style={{ padding: 24, textAlign: "center", color: C.textLight, fontSize: 13 }}>No performance reports available yet for this property.</div>
+          ) : (
+            propReports.map((r, i) => (
+              <div key={r.id} style={{ padding: 16, background: C.warm, borderRadius: 12, marginBottom: i < propReports.length - 1 ? 12 : 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>{r.period}</div>
+                    <div style={{ fontSize: 11, color: C.textMid }}>Generated {r.createdAt}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Badge label={r.status} variant="green" />
+                    <button style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT }}>Download</button>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
+                  {[
+                    { label: "Nights Booked", value: `${r.nightsBooked}/${r.nightsAvailable}` },
+                    { label: "Occupancy", value: `${r.occupancy}%` },
+                    { label: "Revenue", value: euro(r.grossRevenue) },
+                    { label: "Expenses", value: euro(r.totalExpenses) },
+                    { label: "Net to Investors", value: euro(r.netProfit), color: C.green },
+                  ].map(s => (
+                    <div key={s.label}>
+                      <div style={{ fontSize: 9.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.05em" }}>{s.label}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: s.color || C.dark, marginTop: 2 }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Expense breakdown expandable */}
+                <details style={{ marginTop: 10 }}>
+                  <summary style={{ fontSize: 11, fontWeight: 600, color: C.accent, cursor: "pointer" }}>View Expense Breakdown</summary>
+                  <div style={{ marginTop: 8, padding: 12, background: C.white, borderRadius: 8 }}>
+                    {r.expenses.map((e, ei) => (
+                      <div key={ei} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: ei < r.expenses.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                        <span style={{ fontSize: 12, color: C.text }}>{e.category}</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>{euro(e.amount)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", marginTop: 4, borderTop: `2px solid ${C.border}` }}>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>Sonno Fee (20%)</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.accent }}>{euro(r.managementFee)}</span>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            ))
+          )}
+        </Card>
+
+        {/* Distribution History for this property */}
+        <Card>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark, marginBottom: 4 }}>Distribution History</div>
+          <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Your distributions from this property</div>
+          <MiniBarChart data={propDists} height={140} color={C.green} />
+        </Card>
+      </>
+    );
+  }
+
   return (
     <>
-      <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>{inv.propertyIds.length} properties linked to your investment</div>
+      <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>{inv.propertyIds.length} properties linked to your investment · Click to view details</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
         {inv.propertyIds.map(pid => {
           const p = PROPERTIES.find(pp => pp.id === pid);
+          const propReports = reports.filter(r => r.propertyId === pid && r.status === "Published");
+          const latestOccupancy = propReports.length > 0 ? propReports[0].occupancy : null;
           return p ? (
-            <Card key={p.id}>
+            <Card key={p.id} hover onClick={() => onSelectProperty(p)} style={{ cursor: "pointer" }}>
               <div style={{ display: "flex", gap: 16 }}>
                 <div style={{ width: 80, height: 80, borderRadius: 12, background: C.warm, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, flexShrink: 0 }}>{p.img}</div>
                 <div style={{ flex: 1 }}>
@@ -1013,13 +1506,16 @@ function InvestorProperties({ investor }) {
                       { label: "Type", value: p.type },
                       { label: "Bedrooms", value: p.bedrooms },
                       { label: "Yield", value: `~${p.monthlyYield}%/mo` },
-                      { label: "Contract", value: `${p.contractYears} years` },
+                      { label: "Occupancy", value: latestOccupancy ? `${latestOccupancy}%` : "—" },
                     ].map(s => (
                       <div key={s.label}>
                         <div style={{ fontSize: 9.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.05em" }}>{s.label}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: C.dark, marginTop: 2 }}>{s.value}</div>
                       </div>
                     ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 11, fontWeight: 600, color: C.accent }}>
+                    {propReports.length > 0 ? `${propReports.length} report(s) available` : "No reports yet"} · View Details →
                   </div>
                 </div>
               </div>
@@ -1031,11 +1527,21 @@ function InvestorProperties({ investor }) {
   );
 }
 
-function InvestorDocuments() {
+function InvestorDocuments({ investor, reports }) {
+  const inv = INVESTOR_DATA.find(i => i.id === investor?.id) || INVESTOR_DATA[0];
+  // Auto-generated report documents for this investor's properties
+  const reportDocs = reports
+    .filter(r => r.status === "Published" && inv.propertyIds.includes(r.propertyId))
+    .map(r => {
+      const p = PROPERTIES.find(pp => pp.id === r.propertyId);
+      return { name: `Performance Report — ${p?.name} — ${r.period}`, type: "Performance Report", date: r.createdAt, size: "280 KB", auto: true };
+    });
+
   const docs = [
     { name: "Investment Agreement", type: "Contract", date: "Mar 2022", size: "2.4 MB" },
     { name: "Monthly Statement - Feb 2026", type: "Statement", date: "Mar 1, 2026", size: "340 KB" },
     { name: "Annual Tax Summary 2025", type: "Tax", date: "Feb 15, 2026", size: "1.8 MB" },
+    ...reportDocs,
     { name: "Property Portfolio Overview", type: "Report", date: "Jan 10, 2026", size: "5.2 MB" },
     { name: "Distribution Schedule 2026", type: "Schedule", date: "Dec 20, 2025", size: "180 KB" },
     { name: "Lease Extension Policy", type: "Policy", date: "Nov 5, 2025", size: "420 KB" },
