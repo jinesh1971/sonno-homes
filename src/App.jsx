@@ -46,18 +46,18 @@ const PROPERTIES = [
 ];
 
 const INVESTORS = [
-  { id: 1, name: "Marco Bianchi", email: "m.bianchi@email.com", phone: "+39 338 123 4567", occupation: "Dentist", city: "London, UK", invested: 25000, propertyIds: [1, 3], startDate: "2022-03-01", monthsActive: 48, futureCommitment: true, notes: "Interested in 2 more units" },
-  { id: 2, name: "Sarah Thompson", email: "s.thompson@email.com", phone: "+44 7700 900123", occupation: "Solicitor", city: "Manchester, UK", invested: 10000, propertyIds: [2], startDate: "2022-06-01", monthsActive: 45, futureCommitment: true, notes: "Referred 3 other investors" },
-  { id: 3, name: "Ahmed Al-Rashid", email: "a.rashid@email.com", phone: "+971 50 123 4567", occupation: "Business Owner", city: "Dubai, UAE", invested: 50000, propertyIds: [1, 4, 6, 9], startDate: "2021-09-01", monthsActive: 54, futureCommitment: true, notes: "High net worth, wants luxury only" },
-  { id: 4, name: "Elena Rossi", email: "e.rossi@email.com", phone: "+39 333 456 7890", occupation: "Architect", city: "Rome, Italy", invested: 15000, propertyIds: [5], startDate: "2022-11-01", monthsActive: 40, futureCommitment: false, notes: "" },
-  { id: 5, name: "James O'Brien", email: "j.obrien@email.com", phone: "+353 87 123 4567", occupation: "Software Engineer", city: "Dublin, Ireland", invested: 20000, propertyIds: [3, 7], startDate: "2021-02-01", monthsActive: 60, futureCommitment: true, notes: "Contract fully matured, wants renewal" },
-  { id: 6, name: "Priya Sharma", email: "p.sharma@email.com", phone: "+91 98765 43210", occupation: "Physician", city: "Mumbai, India", invested: 30000, propertyIds: [2, 4, 8], startDate: "2023-01-01", monthsActive: 38, futureCommitment: true, notes: "Exploring 50K package" },
-  { id: 7, name: "Hans Muller", email: "h.muller@email.com", phone: "+49 170 123 4567", occupation: "Retired Engineer", city: "Munich, Germany", invested: 40000, propertyIds: [6, 9, 10], startDate: "2022-05-01", monthsActive: 46, futureCommitment: false, notes: "Prefers quarterly reports" },
-  { id: 8, name: "Yuki Tanaka", email: "y.tanaka@email.com", phone: "+81 90 1234 5678", occupation: "Financial Analyst", city: "Tokyo, Japan", invested: 10000, propertyIds: [8], startDate: "2023-08-01", monthsActive: 31, futureCommitment: true, notes: "" },
-  { id: 9, name: "Carlos Mendez", email: "c.mendez@email.com", phone: "+34 612 345 678", occupation: "Restaurant Owner", city: "Barcelona, Spain", invested: 35000, propertyIds: [1, 3, 5], startDate: "2022-09-01", monthsActive: 42, futureCommitment: true, notes: "Wants to visit properties" },
-  { id: 10, name: "Fatima Hassan", email: "f.hassan@email.com", phone: "+44 7911 123456", occupation: "Pharmacist", city: "Birmingham, UK", invested: 12000, propertyIds: [4], startDate: "2023-04-01", monthsActive: 35, futureCommitment: false, notes: "May not renew" },
-  { id: 11, name: "Luca Ferrari", email: "l.ferrari@email.com", phone: "+39 347 890 1234", occupation: "Lawyer", city: "Milan, Italy", invested: 60000, propertyIds: [2, 6, 7, 9, 10], startDate: "2021-05-01", monthsActive: 58, futureCommitment: true, notes: "Top investor, VIP" },
-  { id: 12, name: "Emma Williams", email: "e.williams@email.com", phone: "+44 7456 789012", occupation: "Marketing Director", city: "London, UK", invested: 18000, propertyIds: [1, 5], startDate: "2023-06-01", monthsActive: 33, futureCommitment: true, notes: "" },
+  { id: 1, name: "Marco Bianchi", email: "m.bianchi@email.com", phone: "+39 338 123 4567", occupation: "Dentist", city: "London, UK", invested: 25000, propertyIds: [1, 3], investments: { 1: 15000, 3: 10000 }, startDate: "2022-03-01", monthsActive: 48, futureCommitment: true, notes: "Interested in 2 more units" },
+  { id: 2, name: "Sarah Thompson", email: "s.thompson@email.com", phone: "+44 7700 900123", occupation: "Solicitor", city: "Manchester, UK", invested: 10000, propertyIds: [2], investments: { 2: 10000 }, startDate: "2022-06-01", monthsActive: 45, futureCommitment: true, notes: "Referred 3 other investors" },
+  { id: 3, name: "Ahmed Al-Rashid", email: "a.rashid@email.com", phone: "+971 50 123 4567", occupation: "Business Owner", city: "Dubai, UAE", invested: 50000, propertyIds: [1, 4, 6, 9], investments: { 1: 18000, 4: 8000, 6: 14000, 9: 10000 }, startDate: "2021-09-01", monthsActive: 54, futureCommitment: true, notes: "High net worth, wants luxury only" },
+  { id: 4, name: "Elena Rossi", email: "e.rossi@email.com", phone: "+39 333 456 7890", occupation: "Architect", city: "Rome, Italy", invested: 15000, propertyIds: [5], investments: { 5: 15000 }, startDate: "2022-11-01", monthsActive: 40, futureCommitment: false, notes: "" },
+  { id: 5, name: "James O'Brien", email: "j.obrien@email.com", phone: "+353 87 123 4567", occupation: "Software Engineer", city: "Dublin, Ireland", invested: 20000, propertyIds: [3, 7], investments: { 3: 12000, 7: 8000 }, startDate: "2021-02-01", monthsActive: 60, futureCommitment: true, notes: "Contract fully matured, wants renewal" },
+  { id: 6, name: "Priya Sharma", email: "p.sharma@email.com", phone: "+91 98765 43210", occupation: "Physician", city: "Mumbai, India", invested: 30000, propertyIds: [2, 4, 8], investments: { 2: 10000, 4: 12000, 8: 8000 }, startDate: "2023-01-01", monthsActive: 38, futureCommitment: true, notes: "Exploring 50K package" },
+  { id: 7, name: "Hans Muller", email: "h.muller@email.com", phone: "+49 170 123 4567", occupation: "Retired Engineer", city: "Munich, Germany", invested: 40000, propertyIds: [6, 9, 10], investments: { 6: 18000, 9: 12000, 10: 10000 }, startDate: "2022-05-01", monthsActive: 46, futureCommitment: false, notes: "Prefers quarterly reports" },
+  { id: 8, name: "Yuki Tanaka", email: "y.tanaka@email.com", phone: "+81 90 1234 5678", occupation: "Financial Analyst", city: "Tokyo, Japan", invested: 10000, propertyIds: [8], investments: { 8: 10000 }, startDate: "2023-08-01", monthsActive: 31, futureCommitment: true, notes: "" },
+  { id: 9, name: "Carlos Mendez", email: "c.mendez@email.com", phone: "+34 612 345 678", occupation: "Restaurant Owner", city: "Barcelona, Spain", invested: 35000, propertyIds: [1, 3, 5], investments: { 1: 15000, 3: 12000, 5: 8000 }, startDate: "2022-09-01", monthsActive: 42, futureCommitment: true, notes: "Wants to visit properties" },
+  { id: 10, name: "Fatima Hassan", email: "f.hassan@email.com", phone: "+44 7911 123456", occupation: "Pharmacist", city: "Birmingham, UK", invested: 12000, propertyIds: [4], investments: { 4: 12000 }, startDate: "2023-04-01", monthsActive: 35, futureCommitment: false, notes: "May not renew" },
+  { id: 11, name: "Luca Ferrari", email: "l.ferrari@email.com", phone: "+39 347 890 1234", occupation: "Lawyer", city: "Milan, Italy", invested: 60000, propertyIds: [2, 6, 7, 9, 10], investments: { 2: 15000, 6: 14000, 7: 8000, 9: 11000, 10: 12000 }, startDate: "2021-05-01", monthsActive: 58, futureCommitment: true, notes: "Top investor, VIP" },
+  { id: 12, name: "Emma Williams", email: "e.williams@email.com", phone: "+44 7456 789012", occupation: "Marketing Director", city: "London, UK", invested: 18000, propertyIds: [1, 5], investments: { 1: 11000, 5: 7000 }, startDate: "2023-06-01", monthsActive: 33, futureCommitment: true, notes: "" },
 ];
 
 // Pre-compute distributions
@@ -1145,24 +1145,28 @@ function InvestorOverview({ investor, onViewProperty, reports }) {
   const remaining = inv.invested - inv.totalDistributed;
   const monthsToRecoup = remaining > 0 ? Math.ceil(remaining / avgMonthly) : 0;
 
-  // Allocation data for pie chart
-  const propCount = inv.propertyIds.length;
-  const perPropInvested = inv.invested / propCount;
+  // Allocation data for pie chart — uses per-property investment amounts
   const allocations = inv.propertyIds.map(pid => {
     const p = PROPERTIES.find(pp => pp.id === pid);
-    return { name: p?.name || "Unknown", amount: perPropInvested, pct: (1 / propCount) * 100, color: p?.img };
+    const amount = inv.investments?.[pid] || (inv.invested / inv.propertyIds.length);
+    return { name: p?.name || "Unknown", amount, pct: (amount / inv.invested) * 100, color: p?.img };
   });
 
-  // Per-property ROI (simulated — distribute total evenly for demo)
-  const perPropDist = inv.totalDistributed / propCount;
+  // Per-property ROI — distribute total returns proportionally to investment weight
   const propertyROIs = inv.propertyIds.map(pid => {
     const p = PROPERTIES.find(pp => pp.id === pid);
-    const roi = (perPropDist / perPropInvested) * 100;
-    return { name: p?.name || "Unknown", roi, img: p?.img };
+    const propInvested = inv.investments?.[pid] || (inv.invested / inv.propertyIds.length);
+    const weight = propInvested / inv.invested;
+    const propDistributed = inv.totalDistributed * weight;
+    // Add slight variance per property so they don't all look identical
+    const variance = 0.85 + (((pid * 7) % 10) / 10) * 0.3;
+    const roi = ((propDistributed * variance) / propInvested) * 100;
+    return { name: p?.name || "Unknown", roi, img: p?.img, invested: propInvested, distributed: Math.round(propDistributed * variance) };
   });
 
   // Pie chart colors
   const PIE_COLORS = ["#B8854F", "#2E7D4F", "#2563EB", "#C0392B", "#7C3AED", "#D97706", "#059669", "#DC2626", "#4F46E5", "#0891B2"];
+  const propCount = inv.propertyIds.length;
   
   return (
     <>
@@ -1393,8 +1397,9 @@ function InvestorProperties({ investor, selectedProperty, onSelectProperty, repo
     const p = selectedProperty;
     const propReports = reports.filter(r => r.propertyId === p.id && r.status === "Published");
     const propDists = inv.distributions.slice(-12); // simulated per-property distributions
-    const perPropInvested = inv.invested / inv.propertyIds.length;
-    const perPropDist = inv.totalDistributed / inv.propertyIds.length;
+    const perPropInvested = inv.investments?.[p.id] || (inv.invested / inv.propertyIds.length);
+    const weight = perPropInvested / inv.invested;
+    const perPropDist = Math.round(inv.totalDistributed * weight);
     const propROI = (perPropDist / perPropInvested) * 100;
 
     return (
