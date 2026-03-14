@@ -59,7 +59,7 @@ app.use("/api/v1/audit-log", auditRoutes);
 
 // Serve frontend static files in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientDist = path.join(__dirname, "../../client");
+const clientDist = path.join(__dirname, "../client");
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(clientDist));
   app.get("{*path}", (_req, res) => {
