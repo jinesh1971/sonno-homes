@@ -2,7 +2,7 @@
 set -e
 
 echo "=== Building frontend ==="
-npm install
+npm install --include=dev
 npm run build
 # Move built frontend into server/client so Express can serve it
 rm -rf server/client
