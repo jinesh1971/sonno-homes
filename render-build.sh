@@ -10,7 +10,7 @@ mv dist server/client
 
 echo "=== Building backend ==="
 cd server
-npm install
+npm install --include=dev
 npx prisma generate
 npm run build
 
