@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import path from "path";
+import { fileURLToPath } from "url";
 import { clerkAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import webhookRoutes from "./routes/webhooks.js";
@@ -18,8 +20,10 @@ const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
 // Global middleware
-app.use(helmet());
-app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173", credentials: true }));
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === "production" ? false : undefined,
+}));
+app.use(cors({ origin: process.env.FRONTEND_URL || "*", credentials: true }));
 
 // Webhook routes BEFORE json parser (Clerk needs raw body)
 app.use("/api/webhooks", webhookRoutes);
@@ -52,6 +56,16 @@ app.use("/api/v1/documents", documentRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/exports", exportRoutes);
 app.use("/api/v1/audit-log", auditRoutes);
+
+// Serve frontend static files in production
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const clientDist = path.join(__dirname, "../../client");
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+}
 
 // Error handler (must be last)
 app.use(errorHandler);

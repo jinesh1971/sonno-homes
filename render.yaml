@@ -1,0 +1,22 @@
+# Render Blueprint — Sonno Homes Platform
+services:
+  - type: web
+    name: sonno-homes
+    runtime: node
+    buildCommand: bash render-build.sh
+    startCommand: cd server && node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        sync: false
+      - key: DEV_BYPASS_AUTH
+        value: "true"
+      - key: CLERK_SECRET_KEY
+        value: sk_test_placeholder
+      - key: CLERK_PUBLISHABLE_KEY
+        value: pk_test_placeholder
+      - key: FRONTEND_URL
+        sync: false
