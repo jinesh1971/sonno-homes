@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { Request, Response, NextFunction } from "express";
 import prisma from "../lib/prisma.js";
 import { resolveUser, requireRole, requireOrg } from "../middleware/auth.js";
-import { updateUserSchema, updateProfileSchema, uuidParam, paginationQuery } from "../lib/validation.js";
+import { updateUserSchema, createInvestorSchema, updateProfileSchema, uuidParam, paginationQuery } from "../lib/validation.js";
 import { NotFoundError, ForbiddenError } from "../lib/errors.js";
 
 const router = Router();
@@ -26,6 +26,38 @@ router.get("/", requireRole("admin"), async (req: Request, res: Response, next: 
     ]);
 
     res.json({ success: true, data: { users, total, page, limit } });
+  } catch (err) { next(err); }
+});
+
+// POST /users (admin only — create investor)
+router.post("/", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = createInvestorSchema.parse(req.body);
+    const orgId = req.dbUser!.orgId;
+
+    const user = await prisma.user.create({
+      data: {
+        orgId,
+        clerkId: `manual_${Date.now()}`,
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone || null,
+        role: "investor",
+        investorProfile: {
+          create: {
+            occupation: data.occupation || null,
+            city: data.city || null,
+            country: data.country || null,
+            notes: data.notes || null,
+            futureCommitment: data.futureCommitment ?? false,
+          },
+        },
+      },
+      include: { investorProfile: true },
+    });
+
+    res.status(201).json({ success: true, data: user });
   } catch (err) { next(err); }
 });
 

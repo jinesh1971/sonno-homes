@@ -35,11 +35,11 @@ async function main() {
 
   // 3. Properties
   const propertyData = [
-    { id: "p0000000-0000-0000-0000-000000000001", name: "Villa Serena", propertyType: "Villa", location: "Amalfi Coast, Campania", region: "Campania", bedrooms: 4, contractYears: 5, monthlyYield: 1.9, propertyValue: 450000, status: "active" as const, acquisitionDate: new Date("2022-03-01") },
-    { id: "p0000000-0000-0000-0000-000000000002", name: "Casa del Sole", propertyType: "Lakehouse", location: "Lake Como, Lombardy", region: "Lombardy", bedrooms: 3, contractYears: 5, monthlyYield: 1.7, propertyValue: 380000, status: "active" as const, acquisitionDate: new Date("2022-06-01") },
-    { id: "p0000000-0000-0000-0000-000000000003", name: "Palazzo Azzurro", propertyType: "Apartment", location: "Florence, Tuscany", region: "Tuscany", bedrooms: 2, contractYears: 5, monthlyYield: 1.5, propertyValue: 320000, status: "active" as const, acquisitionDate: new Date("2022-01-01") },
-    { id: "p0000000-0000-0000-0000-000000000004", name: "Trullo Bianco", propertyType: "Trullo", location: "Alberobello, Puglia", region: "Puglia", bedrooms: 2, contractYears: 5, monthlyYield: 2.1, propertyValue: 180000, status: "active" as const, acquisitionDate: new Date("2022-09-01") },
-    { id: "p0000000-0000-0000-0000-000000000005", name: "Masseria Oliveto", propertyType: "Farmhouse", location: "Ostuni, Puglia", region: "Puglia", bedrooms: 6, contractYears: 5, monthlyYield: 1.4, propertyValue: 620000, status: "active" as const, acquisitionDate: new Date("2023-01-01") },
+    { id: "10000000-0000-0000-0000-000000000001", name: "Villa Serena", propertyType: "Villa", location: "Amalfi Coast, Campania", region: "Campania", bedrooms: 4, contractYears: 5, monthlyYield: 1.9, propertyValue: 450000, status: "active" as const, acquisitionDate: new Date("2022-03-01") },
+    { id: "10000000-0000-0000-0000-000000000002", name: "Casa del Sole", propertyType: "Lakehouse", location: "Lake Como, Lombardy", region: "Lombardy", bedrooms: 3, contractYears: 5, monthlyYield: 1.7, propertyValue: 380000, status: "active" as const, acquisitionDate: new Date("2022-06-01") },
+    { id: "10000000-0000-0000-0000-000000000003", name: "Palazzo Azzurro", propertyType: "Apartment", location: "Florence, Tuscany", region: "Tuscany", bedrooms: 2, contractYears: 5, monthlyYield: 1.5, propertyValue: 320000, status: "active" as const, acquisitionDate: new Date("2022-01-01") },
+    { id: "10000000-0000-0000-0000-000000000004", name: "Trullo Bianco", propertyType: "Trullo", location: "Alberobello, Puglia", region: "Puglia", bedrooms: 2, contractYears: 5, monthlyYield: 2.1, propertyValue: 180000, status: "active" as const, acquisitionDate: new Date("2022-09-01") },
+    { id: "10000000-0000-0000-0000-000000000005", name: "Masseria Oliveto", propertyType: "Farmhouse", location: "Ostuni, Puglia", region: "Puglia", bedrooms: 6, contractYears: 5, monthlyYield: 1.4, propertyValue: 620000, status: "active" as const, acquisitionDate: new Date("2023-01-01") },
   ];
 
   const properties = [];
@@ -54,11 +54,11 @@ async function main() {
 
   // 4. Investors
   const investorData = [
-    { id: "i0000000-0000-0000-0000-000000000001", clerkId: "clerk_inv_001", email: "m.bianchi@email.com", firstName: "Marco", lastName: "Bianchi", phone: "+39 333 123 4567", profile: { occupation: "Architect", city: "Rome", country: "Italy", futureCommitment: true } },
-    { id: "i0000000-0000-0000-0000-000000000002", clerkId: "clerk_inv_002", email: "s.rossi@email.com", firstName: "Sofia", lastName: "Rossi", phone: "+39 340 987 6543", profile: { occupation: "Doctor", city: "Milan", country: "Italy", futureCommitment: true } },
-    { id: "i0000000-0000-0000-0000-000000000003", clerkId: "clerk_inv_003", email: "j.smith@email.com", firstName: "James", lastName: "Smith", phone: "+1 212 555 0123", profile: { occupation: "Banker", city: "New York", country: "USA", futureCommitment: false } },
-    { id: "i0000000-0000-0000-0000-000000000004", clerkId: "clerk_inv_004", email: "e.dubois@email.com", firstName: "Elena", lastName: "Dubois", phone: "+33 6 12 34 56 78", profile: { occupation: "Marketing Director", city: "Paris", country: "France", futureCommitment: true } },
-    { id: "i0000000-0000-0000-0000-000000000005", clerkId: "clerk_inv_005", email: "a.conti@email.com", firstName: "Alessandro", lastName: "Conti", phone: "+39 348 555 7890", profile: { occupation: "Restaurateur", city: "Naples", country: "Italy", futureCommitment: true } },
+    { id: "20000000-0000-0000-0000-000000000001", clerkId: "clerk_inv_001", email: "m.bianchi@email.com", firstName: "Marco", lastName: "Bianchi", phone: "+39 333 123 4567", profile: { occupation: "Architect", city: "Rome", country: "Italy", futureCommitment: true } },
+    { id: "20000000-0000-0000-0000-000000000002", clerkId: "clerk_inv_002", email: "s.rossi@email.com", firstName: "Sofia", lastName: "Rossi", phone: "+39 340 987 6543", profile: { occupation: "Doctor", city: "Milan", country: "Italy", futureCommitment: true } },
+    { id: "20000000-0000-0000-0000-000000000003", clerkId: "clerk_inv_003", email: "j.smith@email.com", firstName: "James", lastName: "Smith", phone: "+1 212 555 0123", profile: { occupation: "Banker", city: "New York", country: "USA", futureCommitment: false } },
+    { id: "20000000-0000-0000-0000-000000000004", clerkId: "clerk_inv_004", email: "e.dubois@email.com", firstName: "Elena", lastName: "Dubois", phone: "+33 6 12 34 56 78", profile: { occupation: "Marketing Director", city: "Paris", country: "France", futureCommitment: true } },
+    { id: "20000000-0000-0000-0000-000000000005", clerkId: "clerk_inv_005", email: "a.conti@email.com", firstName: "Alessandro", lastName: "Conti", phone: "+39 348 555 7890", profile: { occupation: "Restaurateur", city: "Naples", country: "Italy", futureCommitment: true } },
   ];
 
   const investors = [];
@@ -95,7 +95,7 @@ async function main() {
     const investorId = investors[im.investorIdx].id;
     const propertyId = properties[im.propertyIdx].id;
     await prisma.investment.upsert({
-      where: { investorId_propertyId: { investorId, propertyId } },
+      where: { uq_investment: { investorId, propertyId } },
       update: {},
       create: {
         investorId,
@@ -110,7 +110,7 @@ async function main() {
 
   // 6. Sample performance report (published)
   const report = await prisma.performanceReport.upsert({
-    where: { propertyId_periodStart_periodEnd: { propertyId: properties[0].id, periodStart: new Date("2025-01-01"), periodEnd: new Date("2025-01-31") } },
+    where: { uq_report_property_period: { propertyId: properties[0].id, periodStart: new Date("2025-01-01"), periodEnd: new Date("2025-01-31") } },
     update: {},
     create: {
       propertyId: properties[0].id,

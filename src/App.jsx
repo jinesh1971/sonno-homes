@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { DataProvider, useData } from "./DataContext.jsx";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SONNO HOMES — Investment Management Platform
@@ -243,25 +244,140 @@ function SortableTable({ columns, data, onRowClick }) {
   );
 }
 
-function MiniBarChart({ data, height = 140, color = C.accent }) {
-  const max = Math.max(...data.map(d => d.amount));
+function MiniBarChart({ data, height = 160, color = C.accent }) {
+  const [hovered, setHovered] = useState(null);
+  if (!data || data.length === 0) return null;
+
+  const amounts = data.map(d => d.amount);
+  const max = Math.max(...amounts);
+  const min = Math.min(...amounts);
+  const range = max - min || 1;
+  const avg = amounts.reduce((s, a) => s + a, 0) / amounts.length;
+
+  // Chart dimensions
+  const W = 600, H = height, padTop = 24, padBot = 32, padLeft = 8, padRight = 8;
+  const chartW = W - padLeft - padRight;
+  const chartH = H - padTop - padBot;
+
+  // Scale helpers — add 10% padding above/below
+  const yMin = min - range * 0.15;
+  const yMax = max + range * 0.15;
+  const scaleY = (v) => padTop + chartH - ((v - yMin) / (yMax - yMin)) * chartH;
+  const scaleX = (i) => padLeft + (i / (data.length - 1)) * chartW;
+
+  // Build SVG path points
+  const points = data.map((d, i) => ({ x: scaleX(i), y: scaleY(d.amount) }));
+
+  // Smooth curve using cardinal spline
+  const lineD = points.map((p, i) => {
+    if (i === 0) return `M${p.x},${p.y}`;
+    const p0 = points[Math.max(0, i - 2)];
+    const p1 = points[i - 1];
+    const p2 = p;
+    const p3 = points[Math.min(points.length - 1, i + 1)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    return `C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+  }).join(" ");
+
+  // Area fill path (line + close to bottom)
+  const areaD = `${lineD} L${points[points.length - 1].x},${padTop + chartH} L${points[0].x},${padTop + chartH} Z`;
+
+  // Horizontal grid lines (3 lines)
+  const gridValues = [yMin + (yMax - yMin) * 0.25, yMin + (yMax - yMin) * 0.5, yMin + (yMax - yMin) * 0.75];
+
+  // Average line Y
+  const avgY = scaleY(avg);
+
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height, padding: "0 2px" }}>
-      {data.map((d, i) => (
-        <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <div style={{ fontSize: 8, color: C.textLight, fontWeight: 600, whiteSpace: "nowrap" }}>{euro(d.amount)}</div>
-          <div style={{
-            width: "100%", maxWidth: 24, minHeight: 4, borderRadius: "4px 4px 2px 2px",
-            height: `${Math.max(8, (d.amount / max) * 100)}%`,
-            background: d.status === "Pending" ? `${color}55` : `linear-gradient(180deg, ${color}, ${color}aa)`,
-            transition: "height 0.5s cubic-bezier(0.4,0,0.2,1)",
-          }} />
-          <span style={{ fontSize: 8.5, color: C.textLight, fontWeight: 500 }}>{d.month}</span>
-        </div>
-      ))}
+    <div style={{ position: "relative", width: "100%" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }}>
+        <defs>
+          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={color} stopOpacity="0.6" />
+            <stop offset="50%" stopColor={color} stopOpacity="1" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.6" />
+          </linearGradient>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        {/* Grid lines */}
+        {gridValues.map((v, i) => (
+          <line key={i} x1={padLeft} y1={scaleY(v)} x2={W - padRight} y2={scaleY(v)} stroke={C.border} strokeWidth="0.8" strokeDasharray="4,4" opacity="0.5" />
+        ))}
+
+        {/* Average line */}
+        <line x1={padLeft} y1={avgY} x2={W - padRight} y2={avgY} stroke={C.accent} strokeWidth="1" strokeDasharray="6,4" opacity="0.4" />
+        <text x={W - padRight - 2} y={avgY - 5} textAnchor="end" style={{ fontSize: 8, fill: C.accent, opacity: 0.6, fontWeight: 600 }}>avg {euro(Math.round(avg))}</text>
+
+        {/* Area fill */}
+        <path d={areaD} fill="url(#areaGrad)" />
+
+        {/* Line */}
+        <path d={lineD} fill="none" stroke="url(#lineGrad)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Glow line underneath */}
+        <path d={lineD} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" opacity="0.15" filter="url(#glow)" />
+
+        {/* Data points + hover zones */}
+        {points.map((p, i) => (
+          <g key={i} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
+            {/* Invisible hit area */}
+            <rect x={p.x - chartW / data.length / 2} y={padTop} width={chartW / data.length} height={chartH} fill="transparent" />
+
+            {/* Vertical guide on hover */}
+            {hovered === i && (
+              <line x1={p.x} y1={padTop} x2={p.x} y2={padTop + chartH} stroke={color} strokeWidth="1" opacity="0.2" strokeDasharray="3,3" />
+            )}
+
+            {/* Dot */}
+            <circle cx={p.x} cy={p.y} r={hovered === i ? 5 : 3} fill={data[i].status === "Pending" ? C.orange : color} stroke="#fff" strokeWidth="2"
+              style={{ transition: "r 0.2s ease, filter 0.2s ease", filter: hovered === i ? `drop-shadow(0 0 4px ${color})` : "none" }} />
+
+            {/* Tooltip on hover */}
+            {hovered === i && (
+              <g>
+                <rect x={p.x - 42} y={p.y - 36} width={84} height={24} rx="6" fill={C.dark} opacity="0.92" />
+                <text x={p.x} y={p.y - 20} textAnchor="middle" style={{ fontSize: 10, fill: "#fff", fontWeight: 700 }}>{euro(data[i].amount)}</text>
+                <polygon points={`${p.x - 5},${p.y - 12} ${p.x + 5},${p.y - 12} ${p.x},${p.y - 6}`} fill={C.dark} opacity="0.92" />
+              </g>
+            )}
+
+            {/* Month labels */}
+            <text x={p.x} y={H - 8} textAnchor="middle" style={{ fontSize: 9, fill: hovered === i ? C.dark : C.textLight, fontWeight: hovered === i ? 700 : 500 }}>
+              {data[i].month}
+            </text>
+          </g>
+        ))}
+      </svg>
+
+      {/* Summary strip */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, padding: "8px 12px", background: `${color}08`, borderRadius: 8 }}>
+        {[
+          { label: "Highest", value: euro(max), color: C.green },
+          { label: "Average", value: euro(Math.round(avg)), color: C.accent },
+          { label: "Lowest", value: euro(min), color: C.textMid },
+          { label: "Total", value: euro(amounts.reduce((s, a) => s + a, 0)), color: C.dark },
+        ].map(s => (
+          <div key={s.label} style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 9, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>{s.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: s.color, marginTop: 2 }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
+
 
 function ProgressRing({ value, max, size = 120, strokeWidth = 10, color = C.accent }) {
   const r = (size - strokeWidth) / 2;
@@ -295,7 +411,16 @@ function exportCSV(filename, headers, rows) {
 // ═════════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═════════════════════════════════════════════════════════════════════════════
-export default function SonnoHomes() {
+export default function SonnoHomesApp() {
+  return (
+    <DataProvider>
+      <SonnoHomes />
+    </DataProvider>
+  );
+}
+
+function SonnoHomes() {
+  const { properties: PROPERTIES_API, investorData: INVESTOR_DATA_API, reports, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, loading, error, addReport, refresh } = useData();
   const [view, setView] = useState("admin"); // admin or investor
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
@@ -303,21 +428,13 @@ export default function SonnoHomes() {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [notifications, setNotifications] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
-  const [investorLogin] = useState(INVESTOR_DATA[0]); // demo: first investor
-  const [reports, setReports] = useState(INITIAL_REPORTS);
+  const investorLogin = INVESTOR_DATA_API.find(i => i.name === "Marco Bianchi") || INVESTOR_DATA_API[0] || INVESTOR_DATA[0]; // Demo investor: Marco Bianchi
 
-  // Keep module-level reference in sync for components that read it directly
-  useEffect(() => { PERFORMANCE_REPORTS = reports; }, [reports]);
+  // Keep module-level references in sync for components that read them directly
+  useEffect(() => { PERFORMANCE_REPORTS = reports.length > 0 ? reports : INITIAL_REPORTS; }, [reports]);
 
-  const addReport = (report) => {
-    const newReport = {
-      ...report,
-      id: reports.length + 1,
-      status: "Published",
-      createdBy: "Sonno Admin",
-      createdAt: new Date().toISOString().split("T")[0],
-    };
-    setReports(prev => [newReport, ...prev]);
+  const handleAddReport = async (report) => {
+    await addReport(report);
   };
 
   useEffect(() => {
@@ -456,18 +573,20 @@ export default function SonnoHomes() {
         {/* Content */}
         <div style={{ flex: 1, overflow: "auto", padding: 28, opacity: fadeIn ? 1 : 0, transform: fadeIn ? "translateY(0)" : "translateY(6px)", transition: "all 0.35s ease", minWidth: 0 }}>
           <div style={{ width: "100%", minWidth: 0 }}>
-            {view === "admin" && page === "dashboard" && <AdminDashboard onViewInvestor={i => { setSelectedInvestor(i); setPage("investors"); }} />}
-            {view === "admin" && page === "investors" && <AdminInvestors selected={selectedInvestor} onSelect={setSelectedInvestor} />}
-            {view === "admin" && page === "properties" && <AdminProperties />}
-            {view === "admin" && page === "distributions" && <AdminDistributions />}
-            {view === "admin" && page === "create-report" && <AdminCreateReport reports={reports} onAddReport={addReport} />}
-            {view === "admin" && page === "reports" && <AdminReports />}
+            {(() => { const apiData = { investorData: INVESTOR_DATA_API, properties: PROPERTIES_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, refresh }; const reps = reports.length > 0 ? reports : INITIAL_REPORTS; return (<>
+            {view === "admin" && page === "dashboard" && <AdminDashboard onViewInvestor={i => { setSelectedInvestor(i); setPage("investors"); }} apiData={apiData} />}
+            {view === "admin" && page === "investors" && <AdminInvestors selected={selectedInvestor} onSelect={setSelectedInvestor} apiData={apiData} />}
+            {view === "admin" && page === "properties" && <AdminProperties apiData={apiData} />}
+            {view === "admin" && page === "distributions" && <AdminDistributions apiData={apiData} />}
+            {view === "admin" && page === "create-report" && <AdminCreateReport reports={reps} onAddReport={handleAddReport} apiData={apiData} />}
+            {view === "admin" && page === "reports" && <AdminReports apiData={apiData} />}
             {view === "admin" && page === "settings" && <AdminSettings />}
-            {view === "investor" && page === "overview" && <InvestorOverview investor={investorLogin} onViewProperty={p => { setSelectedProperty(p); setPage("properties"); }} reports={reports} />}
-            {view === "investor" && page === "distributions" && <InvestorDistributions investor={investorLogin} />}
-            {view === "investor" && page === "properties" && <InvestorProperties investor={investorLogin} selectedProperty={selectedProperty} onSelectProperty={setSelectedProperty} reports={reports} />}
-            {view === "investor" && page === "documents" && <InvestorDocuments investor={investorLogin} reports={reports} />}
-            {view === "investor" && page === "profile" && <InvestorProfile investor={investorLogin} />}
+            {view === "investor" && page === "overview" && <InvestorOverview investor={investorLogin} onViewProperty={p => { setSelectedProperty(p); setPage("properties"); }} reports={reps} apiData={apiData} />}
+            {view === "investor" && page === "distributions" && <InvestorDistributions investor={investorLogin} apiData={apiData} />}
+            {view === "investor" && page === "properties" && <InvestorProperties investor={investorLogin} selectedProperty={selectedProperty} onSelectProperty={setSelectedProperty} reports={reps} apiData={apiData} />}
+            {view === "investor" && page === "documents" && <InvestorDocuments investor={investorLogin} reports={reps} apiData={apiData} />}
+            {view === "investor" && page === "profile" && <InvestorProfile investor={investorLogin} apiData={apiData} />}
+            </>); })()}
           </div>
         </div>
       </main>
@@ -479,18 +598,23 @@ export default function SonnoHomes() {
 // ADMIN PAGES
 // ═════════════════════════════════════════════════════════════════════════════
 
-function AdminDashboard({ onViewInvestor }) {
-  const commitYes = INVESTOR_DATA.filter(i => i.futureCommitment).length;
+function AdminDashboard({ onViewInvestor, apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const totalInv = apiData?.totalInvested || TOTAL_INVESTED;
+  const totalDist = apiData?.totalDistributed || TOTAL_DISTRIBUTED;
+  const avgRoi = apiData?.avgROI || AVG_ROI;
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
+  const commitYes = investors.filter(i => i.futureCommitment).length;
   return (
     <>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 13, color: C.textMid }}>Portfolio overview across all investors and properties</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-        <KPICard label="Total Invested" value={euro(TOTAL_INVESTED)} sub={`+${euro(45000)} this quarter`} trend="up" icon="💰" />
-        <KPICard label="Total Distributed" value={euro(TOTAL_DISTRIBUTED)} sub="Across all investors" icon="📤" />
-        <KPICard label="Active Investors" value={INVESTOR_DATA.length.toString()} sub={`${commitYes} future commitments`} trend="up" icon="👥" />
-        <KPICard label="Avg. ROI Returned" value={pct(AVG_ROI)} sub="Target: breakeven 12-15mo" icon="📊" />
+        <KPICard label="Total Invested" value={euro(totalInv)} sub={`+${euro(45000)} this quarter`} trend="up" icon="💰" />
+        <KPICard label="Total Distributed" value={euro(totalDist)} sub="Across all investors" icon="📤" />
+        <KPICard label="Active Investors" value={investors.length.toString()} sub={`${commitYes} future commitments`} trend="up" icon="👥" />
+        <KPICard label="Avg. ROI Returned" value={pct(avgRoi)} sub="Target: breakeven 12-15mo" icon="📊" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "5fr 3fr", gap: 16, marginBottom: 24 }}>
@@ -502,7 +626,7 @@ function AdminDashboard({ onViewInvestor }) {
             </div>
             <button onClick={() => exportCSV("sonno-investors.csv",
               ["Name","Invested","Distributed","ROI%","Commitment","Months Left"],
-              INVESTOR_DATA.map(i => [i.name, i.invested, i.totalDistributed, i.roiPct.toFixed(1), i.futureCommitment ? "Yes" : "No", i.monthsRemaining])
+              investors.map(i => [i.name, i.invested, i.totalDistributed, i.roiPct.toFixed(1), i.futureCommitment ? "Yes" : "No", i.monthsRemaining])
             )} style={{ padding: "6px 14px", borderRadius: 7, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT, color: C.text }}>
               Export CSV
             </button>
@@ -515,7 +639,7 @@ function AdminDashboard({ onViewInvestor }) {
               { key: "roiPct", label: "ROI %", render: r => <span style={{ fontWeight: 700, color: r.roiPct >= 100 ? C.green : C.accent }}>{pct(r.roiPct)}</span> },
               { key: "futureCommitment", label: "Future", render: r => <Badge label={r.futureCommitment ? "Yes" : "No"} variant={r.futureCommitment ? "green" : "red"} />, sortable: true },
             ]}
-            data={INVESTOR_DATA}
+            data={investors}
             onRowClick={onViewInvestor}
           />
         </Card>
@@ -524,16 +648,16 @@ function AdminDashboard({ onViewInvestor }) {
           <Card>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 14 }}>Future Commitments</div>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <ProgressRing value={commitYes / INVESTOR_DATA.length * 100} max={100} size={100} color={C.green} />
+              <ProgressRing value={investors.length > 0 ? commitYes / investors.length * 100 : 0} max={100} size={100} color={C.green} />
               <div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{commitYes}/{INVESTOR_DATA.length}</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{commitYes}/{investors.length}</div>
                 <div style={{ fontSize: 11, color: C.textMid }}>investors committed to future investments</div>
               </div>
             </div>
           </Card>
           <Card>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 14 }}>Contract Timeline</div>
-            {INVESTOR_DATA.slice(0, 5).map(inv => (
+            {investors.slice(0, 5).map(inv => (
               <div key={inv.id} style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 4 }}>
                   <span style={{ fontWeight: 600, color: C.dark }}>{inv.name}</span>
@@ -548,8 +672,8 @@ function AdminDashboard({ onViewInvestor }) {
           <Card>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 10 }}>Properties by Status</div>
             {[
-              { label: "Active", count: PROPERTIES.filter(p => p.status === "Active").length, color: C.green },
-              { label: "Lease Renewal", count: PROPERTIES.filter(p => p.status === "Lease Renewal").length, color: C.accent },
+              { label: "Active", count: props.filter(p => p.status === "Active").length, color: C.green },
+              { label: "Lease Renewal", count: props.filter(p => p.status === "Lease Renewal").length, color: C.accent },
             ].map(s => (
               <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -566,9 +690,30 @@ function AdminDashboard({ onViewInvestor }) {
   );
 }
 
-function AdminInvestors({ selected, onSelect }) {
+function AdminInvestors({ selected, onSelect, apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
+  const [showInvForm, setShowInvForm] = useState(false);
+  const [invSaving, setInvSaving] = useState(false);
+  const [invForm, setInvForm] = useState({ firstName: "", lastName: "", email: "", phone: "", occupation: "", city: "", country: "Italy", notes: "", futureCommitment: false });
+  const updateInvField = (f, v) => setInvForm(prev => ({ ...prev, [f]: v }));
+
+  const handleCreateInvestor = async () => {
+    if (!invForm.firstName || !invForm.lastName || !invForm.email) return;
+    setInvSaving(true);
+    try {
+      const { createUser } = await import("./api.js");
+      await createUser(invForm);
+      if (apiData?.refresh) await apiData.refresh();
+      setShowInvForm(false);
+      setInvForm({ firstName: "", lastName: "", email: "", phone: "", occupation: "", city: "", country: "Italy", notes: "", futureCommitment: false });
+    } catch (err) {
+      alert("Failed to create investor: " + err.message);
+    } finally { setInvSaving(false); }
+  };
+
   if (selected) {
-    const inv = INVESTOR_DATA.find(i => i.id === selected.id) || selected;
+    const inv = investors.find(i => i.id === selected.id) || selected;
     const recentDists = inv.distributions ? inv.distributions.slice(-12) : [];
     return (
       <>
@@ -626,7 +771,7 @@ function AdminInvestors({ selected, onSelect }) {
           <div style={{ fontSize: 15, fontWeight: 700, color: C.dark, marginBottom: 16 }}>Linked Properties</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
             {inv.propertyIds.map(pid => {
-              const p = PROPERTIES.find(pp => pp.id === pid);
+              const p = props.find(pp => pp.id === pid);
               return p ? (
                 <div key={p.id} style={{ padding: 16, background: C.warm, borderRadius: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -653,15 +798,53 @@ function AdminInvestors({ selected, onSelect }) {
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 13, color: C.textMid }}>{INVESTOR_DATA.length} investors · {euro(TOTAL_INVESTED)} total capital</div>
+        <div style={{ fontSize: 13, color: C.textMid }}>{investors.length} investors · {euro(investors.reduce((s, i) => s + i.invested, 0))} total capital</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => exportCSV("all-investors-full.csv",
             ["Name","Email","Phone","Occupation","City","Invested","Distributed","ROI%","Future Commitment","Months Active","Months Remaining","Notes"],
-            INVESTOR_DATA.map(i => [i.name, i.email, i.phone, i.occupation, i.city, i.invested, i.totalDistributed, i.roiPct.toFixed(1), i.futureCommitment ? "Yes" : "No", i.monthsActive, i.monthsRemaining, i.notes])
+            investors.map(i => [i.name, i.email, i.phone, i.occupation, i.city, i.invested, i.totalDistributed, i.roiPct.toFixed(1), i.futureCommitment ? "Yes" : "No", i.monthsActive, i.monthsRemaining, i.notes])
           )} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT }}>Export CSV</button>
-          <button style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT }}>+ Add Investor</button>
+          <button style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT }} onClick={() => setShowInvForm(true)}>+ Add Investor</button>
         </div>
       </div>
+
+      {showInvForm && (() => {
+        const iStyle = { width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" };
+        const lStyle = { fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5, display: "block" };
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowInvForm(false)}>
+            <div onClick={e => e.stopPropagation()} style={{ background: C.white, borderRadius: 16, width: 520, maxHeight: "85vh", overflow: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }}>
+              <div style={{ padding: "20px 24px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>Add New Investor</div>
+                  <div style={{ fontSize: 12, color: C.textMid, marginTop: 2 }}>Enter investor details below</div>
+                </div>
+                <button onClick={() => setShowInvForm(false)} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", color: C.textMid }}>×</button>
+              </div>
+              <div style={{ padding: 24 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                  <div><label style={lStyle}>First Name *</label><input value={invForm.firstName} onChange={e => updateInvField("firstName", e.target.value)} placeholder="e.g. Marco" style={iStyle} /></div>
+                  <div><label style={lStyle}>Last Name *</label><input value={invForm.lastName} onChange={e => updateInvField("lastName", e.target.value)} placeholder="e.g. Bianchi" style={iStyle} /></div>
+                  <div style={{ gridColumn: "1 / -1" }}><label style={lStyle}>Email *</label><input type="email" value={invForm.email} onChange={e => updateInvField("email", e.target.value)} placeholder="e.g. marco@email.com" style={iStyle} /></div>
+                  <div><label style={lStyle}>Phone</label><input value={invForm.phone} onChange={e => updateInvField("phone", e.target.value)} placeholder="+39 333 123 4567" style={iStyle} /></div>
+                  <div><label style={lStyle}>Occupation</label><input value={invForm.occupation} onChange={e => updateInvField("occupation", e.target.value)} placeholder="e.g. Architect" style={iStyle} /></div>
+                  <div><label style={lStyle}>City</label><input value={invForm.city} onChange={e => updateInvField("city", e.target.value)} placeholder="e.g. Rome" style={iStyle} /></div>
+                  <div><label style={lStyle}>Country</label><input value={invForm.country} onChange={e => updateInvField("country", e.target.value)} style={iStyle} /></div>
+                  <div style={{ gridColumn: "1 / -1" }}><label style={lStyle}>Notes</label><textarea value={invForm.notes} onChange={e => updateInvField("notes", e.target.value)} placeholder="Optional notes..." rows={2} style={{ ...iStyle, resize: "vertical" }} /></div>
+                  <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+                    <input type="checkbox" id="futureCommit" checked={invForm.futureCommitment} onChange={e => updateInvField("futureCommitment", e.target.checked)} style={{ width: 16, height: 16, accentColor: C.accent }} />
+                    <label htmlFor="futureCommit" style={{ fontSize: 13, color: C.dark, cursor: "pointer" }}>Future investment commitment</label>
+                  </div>
+                </div>
+              </div>
+              <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button onClick={() => setShowInvForm(false)} style={{ padding: "9px 20px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT, color: C.text }}>Cancel</button>
+                <button onClick={handleCreateInvestor} disabled={!invForm.firstName || !invForm.lastName || !invForm.email || invSaving} style={{ padding: "9px 24px", borderRadius: 8, border: "none", background: !invForm.firstName || !invForm.lastName || !invForm.email || invSaving ? C.border : C.accent, color: "#fff", cursor: !invForm.firstName || !invForm.lastName || !invForm.email || invSaving ? "default" : "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT }}>{invSaving ? "Creating..." : "Create Investor"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <SortableTable
           columns={[
@@ -681,7 +864,7 @@ function AdminInvestors({ selected, onSelect }) {
             { key: "monthsRemaining", label: "Contract Left", render: r => <span style={{ color: r.monthsRemaining <= 6 ? C.red : C.text }}>{r.monthsRemaining}mo</span> },
             { key: "futureCommitment", label: "Future?", render: r => <Badge label={r.futureCommitment ? "Yes" : "No"} variant={r.futureCommitment ? "green" : "red"} /> },
           ]}
-          data={INVESTOR_DATA}
+          data={investors}
           onRowClick={onSelect}
         />
       </Card>
@@ -689,16 +872,84 @@ function AdminInvestors({ selected, onSelect }) {
   );
 }
 
-function AdminProperties() {
+function AdminProperties({ apiData }) {
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", propertyType: "Villa", location: "", region: "", bedrooms: 2, propertyValue: "", contractYears: 5, monthlyYield: "", acquisitionDate: "", description: "" });
+
+  const TYPES = ["Villa", "Apartment", "Lakehouse", "Trullo", "Farmhouse", "Loft", "Masseria", "Penthouse"];
+  const REGIONS = ["Tuscany", "Puglia", "Lombardy", "Amalfi Coast", "Sicily", "Sardinia", "Umbria", "Veneto", "Lazio", "Liguria"];
+  const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.location) return;
+    setSaving(true);
+    try {
+      const { createProperty } = await import("./api.js");
+      await createProperty({
+        name: form.name, propertyType: form.propertyType, location: form.location,
+        region: form.region || undefined, bedrooms: parseInt(form.bedrooms) || 2,
+        propertyValue: parseFloat(form.propertyValue) || undefined,
+        contractYears: parseInt(form.contractYears) || 5,
+        monthlyYield: parseFloat(form.monthlyYield) || undefined,
+        acquisitionDate: form.acquisitionDate || undefined,
+        description: form.description || undefined,
+      });
+      if (apiData?.refresh) await apiData.refresh();
+      setShowForm(false);
+      setForm({ name: "", propertyType: "Villa", location: "", region: "", bedrooms: 2, propertyValue: "", contractYears: 5, monthlyYield: "", acquisitionDate: "", description: "" });
+    } catch (err) {
+      alert("Failed to create property: " + err.message);
+    } finally { setSaving(false); }
+  };
+
+  const inputStyle = { width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" };
+  const labelStyle = { fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5, display: "block" };
+
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 13, color: C.textMid }}>{PROPERTIES.length} properties across Italy</div>
-        <button style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT }}>+ Add Property</button>
+        <div style={{ fontSize: 13, color: C.textMid }}>{props.length} properties across Italy</div>
+        <button onClick={() => setShowForm(true)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: C.accent, color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT }}>+ Add Property</button>
       </div>
+
+      {showForm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }} onClick={() => setShowForm(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: C.white, borderRadius: 16, width: 560, maxHeight: "85vh", overflow: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }}>
+            <div style={{ padding: "20px 24px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>Add New Property</div>
+                <div style={{ fontSize: 12, color: C.textMid, marginTop: 2 }}>Enter the property details below</div>
+              </div>
+              <button onClick={() => setShowForm(false)} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", color: C.textMid }}>×</button>
+            </div>
+            <div style={{ padding: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+                <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Property Name *</label><input value={form.name} onChange={e => updateField("name", e.target.value)} placeholder="e.g. Villa Serena" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Property Type</label><select value={form.propertyType} onChange={e => updateField("propertyType", e.target.value)} style={{ ...inputStyle, appearance: "auto" }}>{TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                <div><label style={labelStyle}>Region</label><select value={form.region} onChange={e => updateField("region", e.target.value)} style={{ ...inputStyle, appearance: "auto" }}><option value="">Select region...</option>{REGIONS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Location *</label><input value={form.location} onChange={e => updateField("location", e.target.value)} placeholder="e.g. Lake Como, Lombardy" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Bedrooms</label><input type="number" value={form.bedrooms} onChange={e => updateField("bedrooms", e.target.value)} min="0" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Property Value (€)</label><input type="number" value={form.propertyValue} onChange={e => updateField("propertyValue", e.target.value)} placeholder="e.g. 450000" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Contract (Years)</label><input type="number" value={form.contractYears} onChange={e => updateField("contractYears", e.target.value)} min="1" style={inputStyle} /></div>
+                <div><label style={labelStyle}>Monthly Yield (%)</label><input type="number" step="0.1" value={form.monthlyYield} onChange={e => updateField("monthlyYield", e.target.value)} placeholder="e.g. 1.8" style={inputStyle} /></div>
+                <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Acquisition Date</label><input type="date" value={form.acquisitionDate} onChange={e => updateField("acquisitionDate", e.target.value)} style={inputStyle} /></div>
+                <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Description</label><textarea value={form.description} onChange={e => updateField("description", e.target.value)} placeholder="Optional notes about the property..." rows={3} style={{ ...inputStyle, resize: "vertical" }} /></div>
+              </div>
+            </div>
+            <div style={{ padding: "16px 24px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button onClick={() => setShowForm(false)} style={{ padding: "9px 20px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT, color: C.text }}>Cancel</button>
+              <button onClick={handleSubmit} disabled={!form.name || !form.location || saving} style={{ padding: "9px 24px", borderRadius: 8, border: "none", background: !form.name || !form.location || saving ? C.border : C.accent, color: "#fff", cursor: !form.name || !form.location || saving ? "default" : "pointer", fontSize: 12, fontWeight: 600, fontFamily: FONT }}>{saving ? "Creating..." : "Create Property"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-        {PROPERTIES.map(p => {
-          const investorCount = INVESTOR_DATA.filter(i => i.propertyIds.includes(p.id)).length;
+        {props.map(p => {
+          const investorCount = investors.filter(i => i.propertyIds.includes(p.id)).length;
           return (
             <Card key={p.id} hover>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -734,17 +985,19 @@ function AdminProperties() {
   );
 }
 
-function AdminDistributions() {
-  const allDists = INVESTOR_DATA.flatMap(inv => inv.distributions.map(d => ({ ...d, investor: inv.name, invested: inv.invested })));
+function AdminDistributions({ apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const totalDist = investors.reduce((s, i) => s + i.totalDistributed, 0);
+  const allDists = investors.flatMap(inv => inv.distributions.map(d => ({ ...d, investor: inv.name, invested: inv.invested })));
   const recentDists = allDists.slice(-30).reverse();
   const totalThisMonth = allDists.filter(d => d.date === allDists[allDists.length - 1]?.date).reduce((s, d) => s + d.amount, 0);
   
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24 }}>
-        <KPICard label="Total Distributed (All Time)" value={euro(TOTAL_DISTRIBUTED)} icon="📤" />
+        <KPICard label="Total Distributed (All Time)" value={euro(totalDist)} icon="📤" />
         <KPICard label="Latest Month" value={euro(totalThisMonth)} sub="Across all investors" icon="📅" />
-        <KPICard label="Avg. Monthly / Investor" value={euro(Math.round(TOTAL_DISTRIBUTED / INVESTOR_DATA.length / 12))} icon="👤" />
+        <KPICard label="Avg. Monthly / Investor" value={euro(investors.length > 0 ? Math.round(totalDist / investors.length / 12) : 0)} icon="👤" />
       </div>
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -768,34 +1021,36 @@ function AdminDistributions() {
   );
 }
 
-function AdminReports() {
+function AdminReports({ apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
   const reports = [
     { name: "Full Investor Report", desc: "All investors with investment details, distributions, ROI, and future commitments", icon: "📊", action: () => exportCSV("full-investor-report.csv",
       ["Name","Email","Phone","Occupation","City","Invested","Total Distributed","ROI%","Future Commitment","Months Active","Contract Remaining","Properties","Notes"],
-      INVESTOR_DATA.map(i => [i.name, i.email, i.phone, i.occupation, i.city, i.invested, i.totalDistributed, i.roiPct.toFixed(1), i.futureCommitment?"Yes":"No", i.monthsActive, i.monthsRemaining, i.propertyIds.length, i.notes])
+      investors.map(i => [i.name, i.email, i.phone, i.occupation, i.city, i.invested, i.totalDistributed, i.roiPct.toFixed(1), i.futureCommitment?"Yes":"No", i.monthsActive, i.monthsRemaining, i.propertyIds.length, i.notes])
     )},
     { name: "Distribution History", desc: "Complete distribution log across all investors and months", icon: "💸", action: () => exportCSV("distribution-history.csv",
       ["Investor","Period","Amount","Status"],
-      INVESTOR_DATA.flatMap(inv => inv.distributions.map(d => [inv.name, d.date, d.amount, d.status]))
+      investors.flatMap(inv => inv.distributions.map(d => [inv.name, d.date, d.amount, d.status]))
     )},
     { name: "Property Summary", desc: "All properties with type, location, yield, and investor count", icon: "🏡", action: () => exportCSV("property-summary.csv",
       ["Property","Location","Type","Bedrooms","Monthly Yield","Status","Investors"],
-      PROPERTIES.map(p => [p.name, p.location, p.type, p.bedrooms, p.monthlyYield + "%", p.status, INVESTOR_DATA.filter(i => i.propertyIds.includes(p.id)).length])
+      props.map(p => [p.name, p.location, p.type, p.bedrooms, p.monthlyYield + "%", p.status, investors.filter(i => i.propertyIds.includes(p.id)).length])
     )},
     { name: "Future Commitments Report", desc: "Investors who have committed vs declined future investments", icon: "🤝", action: () => exportCSV("future-commitments.csv",
       ["Name","Invested","Commitment","Months Remaining","Notes"],
-      INVESTOR_DATA.map(i => [i.name, i.invested, i.futureCommitment?"Yes":"No", i.monthsRemaining, i.notes])
+      investors.map(i => [i.name, i.invested, i.futureCommitment?"Yes":"No", i.monthsRemaining, i.notes])
     )},
     { name: "ROI Breakdown", desc: "Per-investor ROI analysis with breakeven tracking", icon: "📈", action: () => exportCSV("roi-breakdown.csv",
       ["Investor","Invested","Distributed","ROI%","Breakeven Reached","Months to Breakeven"],
-      INVESTOR_DATA.map(i => {
+      investors.map(i => {
         const be = i.distributions.findIndex((d, idx) => i.distributions.slice(0, idx+1).reduce((s,dd)=>s+dd.amount,0) >= i.invested);
         return [i.name, i.invested, i.totalDistributed, i.roiPct.toFixed(1), i.roiPct >= 100 ? "Yes" : "No", be >= 0 ? be + 1 : "Not yet"];
       })
     )},
     { name: "Contract Expiry Report", desc: "Upcoming contract expirations and renewal status", icon: "📅", action: () => exportCSV("contract-expiry.csv",
       ["Investor","Start Date","Months Active","Months Remaining","Future Commitment"],
-      INVESTOR_DATA.map(i => [i.name, i.startDate, i.monthsActive, i.monthsRemaining, i.futureCommitment?"Yes":"No"])
+      investors.map(i => [i.name, i.startDate, i.monthsActive, i.monthsRemaining, i.futureCommitment?"Yes":"No"])
     )},
   ];
   
@@ -819,7 +1074,8 @@ function AdminReports() {
 }
 
 // ── ADMIN CREATE REPORT ──────────────────────────────────────────────────────
-function AdminCreateReport({ reports, onAddReport }) {
+function AdminCreateReport({ reports, onAddReport, apiData }) {
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [period, setPeriod] = useState("2026-02");
   const [nightsBooked, setNightsBooked] = useState("");
@@ -839,9 +1095,10 @@ function AdminCreateReport({ reports, onAddReport }) {
   const netProfit = grossProfit - managementFee;
 
   const handleGenerate = () => {
-    const prop = PROPERTIES.find(p => p.id === parseInt(selectedPropertyId));
+    const prop = props.find(p => p.id === selectedPropertyId);
     if (!prop) return;
-    const investorsLinked = INVESTOR_DATA.filter(i => i.propertyIds.includes(prop.id));
+    const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+    const investorsLinked = investors.filter(i => i.propertyIds.includes(prop.id));
     const periodLabel = new Date(period + "-01").toLocaleDateString("en-US", { month: "short", year: "numeric" });
     const validExpenses = expenses.filter(e => e.category && e.amount).map(e => ({ category: e.category, amount: parseFloat(e.amount) || 0 }));
     const nb = parseInt(nightsBooked) || 0;
@@ -870,8 +1127,9 @@ function AdminCreateReport({ reports, onAddReport }) {
   // View existing report detail
   if (viewingReport) {
     const r = viewingReport;
-    const prop = PROPERTIES.find(p => p.id === r.propertyId);
-    const investorsLinked = INVESTOR_DATA.filter(i => i.propertyIds.includes(r.propertyId));
+    const prop = props.find(p => p.id === r.propertyId);
+    const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+    const investorsLinked = investors.filter(i => i.propertyIds.includes(r.propertyId));
     return (
       <>
         <button onClick={() => setViewingReport(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: C.accent, fontWeight: 600, marginBottom: 18, fontFamily: FONT }}>← Back to Reports</button>
@@ -952,7 +1210,7 @@ function AdminCreateReport({ reports, onAddReport }) {
               <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Property</div>
               <select value={selectedPropertyId} onChange={e => setSelectedPropertyId(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, appearance: "auto" }}>
                 <option value="">Select property...</option>
-                {PROPERTIES.map(p => <option key={p.id} value={p.id}>{p.img} {p.name} — {p.location}</option>)}
+                {props.map(p => <option key={p.id} value={p.id}>{p.img} {p.name} — {p.location}</option>)}
               </select>
             </div>
             <div>
@@ -1011,7 +1269,7 @@ function AdminCreateReport({ reports, onAddReport }) {
             <Card>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 10 }}>Will Be Shared With</div>
               <div style={{ fontSize: 11, color: C.textMid, marginBottom: 10 }}>Investors linked to this property</div>
-              {INVESTOR_DATA.filter(i => i.propertyIds.includes(parseInt(selectedPropertyId))).map(inv => (
+              {(apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA).filter(i => i.propertyIds.includes(selectedPropertyId)).map(inv => (
                 <div key={inv.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
                   <div style={{ width: 26, height: 26, borderRadius: 7, background: `${C.accent}20`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: C.accent }}>{inv.name.split(" ").map(n => n[0]).join("")}</div>
                   <span style={{ fontSize: 12, fontWeight: 500, color: C.dark }}>{inv.name}</span>
@@ -1057,7 +1315,7 @@ function AdminCreateReport({ reports, onAddReport }) {
         </div>
         <SortableTable
           columns={[
-            { key: "propertyId", label: "Property", render: r => { const p = PROPERTIES.find(pp => pp.id === r.propertyId); return <span style={{ fontWeight: 600, color: C.dark }}>{p?.img} {p?.name}</span>; } },
+            { key: "propertyId", label: "Property", render: r => { const p = props.find(pp => pp.id === r.propertyId); return <span style={{ fontWeight: 600, color: C.dark }}>{p?.img} {p?.name}</span>; } },
             { key: "period", label: "Period" },
             { key: "occupancy", label: "Occupancy", render: r => <span style={{ fontWeight: 600 }}>{r.occupancy}%</span> },
             { key: "grossRevenue", label: "Revenue", render: r => <span style={{ fontWeight: 600 }}>{euro(r.grossRevenue)}</span> },
@@ -1136,8 +1394,10 @@ function AdminSettings() {
 // INVESTOR PAGES
 // ═════════════════════════════════════════════════════════════════════════════
 
-function InvestorOverview({ investor, onViewProperty, reports }) {
-  const inv = INVESTOR_DATA.find(i => i.id === investor.id) || INVESTOR_DATA[0];
+function InvestorOverview({ investor, onViewProperty, reports, apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
+  const inv = investors.find(i => i.id === investor.id) || investors[0];
   const recentDists = inv.distributions.slice(-12);
   const bestMonth = [...inv.distributions].sort((a, b) => b.amount - a.amount)[0];
   const breakeven = inv.distributions.findIndex((d, idx) => inv.distributions.slice(0, idx + 1).reduce((s, dd) => s + dd.amount, 0) >= inv.invested);
@@ -1147,19 +1407,19 @@ function InvestorOverview({ investor, onViewProperty, reports }) {
 
   // Allocation data for pie chart — uses per-property investment amounts
   const allocations = inv.propertyIds.map(pid => {
-    const p = PROPERTIES.find(pp => pp.id === pid);
+    const p = props.find(pp => pp.id === pid);
     const amount = inv.investments?.[pid] || (inv.invested / inv.propertyIds.length);
     return { name: p?.name || "Unknown", amount, pct: (amount / inv.invested) * 100, color: p?.img };
   });
 
   // Per-property ROI — distribute total returns proportionally to investment weight
-  const propertyROIs = inv.propertyIds.map(pid => {
-    const p = PROPERTIES.find(pp => pp.id === pid);
+  const propertyROIs = inv.propertyIds.map((pid, idx) => {
+    const p = props.find(pp => pp.id === pid);
     const propInvested = inv.investments?.[pid] || (inv.invested / inv.propertyIds.length);
     const weight = propInvested / inv.invested;
     const propDistributed = inv.totalDistributed * weight;
     // Add slight variance per property so they don't all look identical
-    const variance = 0.85 + (((pid * 7) % 10) / 10) * 0.3;
+    const variance = 0.85 + ((idx * 7 % 10) / 10) * 0.3;
     const roi = ((propDistributed * variance) / propInvested) * 100;
     return { name: p?.name || "Unknown", roi, img: p?.img, invested: propInvested, distributed: Math.round(propDistributed * variance) };
   });
@@ -1272,7 +1532,7 @@ function InvestorOverview({ investor, onViewProperty, reports }) {
         <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Click a property to view distributions and performance reports</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
           {inv.propertyIds.map(pid => {
-            const p = PROPERTIES.find(pp => pp.id === pid);
+            const p = props.find(pp => pp.id === pid);
             return p ? (
               <div key={p.id} onClick={() => onViewProperty && onViewProperty(p)} style={{ padding: 16, background: C.warm, borderRadius: 12, cursor: "pointer", transition: "all 0.2s" }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
@@ -1297,8 +1557,9 @@ function InvestorOverview({ investor, onViewProperty, reports }) {
   );
 }
 
-function InvestorDistributions({ investor }) {
-  const inv = INVESTOR_DATA.find(i => i.id === investor.id) || INVESTOR_DATA[0];
+function InvestorDistributions({ investor, apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const inv = investors.find(i => i.id === investor.id) || investors[0];
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("desc");
 
@@ -1389,8 +1650,10 @@ function InvestorDistributions({ investor }) {
   );
 }
 
-function InvestorProperties({ investor, selectedProperty, onSelectProperty, reports }) {
-  const inv = INVESTOR_DATA.find(i => i.id === investor.id) || INVESTOR_DATA[0];
+function InvestorProperties({ investor, selectedProperty, onSelectProperty, reports, apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
+  const inv = investors.find(i => i.id === investor.id) || investors[0];
 
   // Property Detail View
   if (selectedProperty) {
@@ -1491,7 +1754,7 @@ function InvestorProperties({ investor, selectedProperty, onSelectProperty, repo
       <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>{inv.propertyIds.length} properties linked to your investment · Click to view details</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
         {inv.propertyIds.map(pid => {
-          const p = PROPERTIES.find(pp => pp.id === pid);
+          const p = props.find(pp => pp.id === pid);
           const propReports = reports.filter(r => r.propertyId === pid && r.status === "Published");
           const latestOccupancy = propReports.length > 0 ? propReports[0].occupancy : null;
           return p ? (
@@ -1532,13 +1795,15 @@ function InvestorProperties({ investor, selectedProperty, onSelectProperty, repo
   );
 }
 
-function InvestorDocuments({ investor, reports }) {
-  const inv = INVESTOR_DATA.find(i => i.id === investor?.id) || INVESTOR_DATA[0];
+function InvestorDocuments({ investor, reports, apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
+  const inv = investors.find(i => i.id === investor?.id) || investors[0];
   // Auto-generated report documents for this investor's properties
   const reportDocs = reports
     .filter(r => r.status === "Published" && inv.propertyIds.includes(r.propertyId))
     .map(r => {
-      const p = PROPERTIES.find(pp => pp.id === r.propertyId);
+      const p = props.find(pp => pp.id === r.propertyId);
       return { name: `Performance Report — ${p?.name} — ${r.period}`, type: "Performance Report", date: r.createdAt, size: "280 KB", auto: true };
     });
 
@@ -1577,8 +1842,9 @@ function InvestorDocuments({ investor, reports }) {
   );
 }
 
-function InvestorProfile({ investor }) {
-  const inv = INVESTOR_DATA.find(i => i.id === investor.id) || INVESTOR_DATA[0];
+function InvestorProfile({ investor, apiData }) {
+  const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
+  const inv = investors.find(i => i.id === investor.id) || investors[0];
   return (
     <>
       <Card style={{ marginBottom: 18 }}>

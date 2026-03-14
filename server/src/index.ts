@@ -34,7 +34,12 @@ app.get("/api/health", (_req, res) => {
 
 // Clerk auth (attaches auth info to all protected requests)
 if (process.env.NODE_ENV !== "test") {
-  app.use(clerkAuth);
+  if (process.env.DEV_BYPASS_AUTH === "true") {
+    // Dev-only: skip Clerk entirely, resolveUser will load user from DB
+    console.log("⚠️  DEV_BYPASS_AUTH enabled — Clerk auth is DISABLED");
+  } else {
+    app.use(clerkAuth);
+  }
 }
 
 // API routes

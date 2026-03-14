@@ -67,6 +67,18 @@ export const updateUserSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+export const createInvestorSchema = z.object({
+  email: z.string().email(),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  phone: z.string().max(50).optional(),
+  occupation: z.string().max(150).optional(),
+  city: z.string().max(150).optional(),
+  country: z.string().max(100).optional(),
+  notes: z.string().optional(),
+  futureCommitment: z.boolean().optional(),
+});
+
 // Investor Profile
 export const updateProfileSchema = z.object({
   occupation: z.string().max(150).optional(),

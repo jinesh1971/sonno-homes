@@ -30,9 +30,22 @@ export const clerkAuth = clerkMiddleware();
 /**
  * Resolves the Clerk user to our DB user record.
  * Must be used after clerkAuth.
+ * In dev mode with DEV_BYPASS_AUTH, uses X-Dev-Role header (admin|investor) to pick a seeded user.
  */
 export async function resolveUser(req: Request, _res: Response, next: NextFunction) {
   try {
+    // Dev bypass: skip Clerk, load user directly from DB
+    if (process.env.DEV_BYPASS_AUTH === "true") {
+      const role = (req.headers["x-dev-role"] as string) || "admin";
+      const user = await prisma.user.findFirst({
+        where: { role: role as UserRole, deletedAt: null },
+        select: { id: true, orgId: true, clerkId: true, email: true, role: true, firstName: true, lastName: true },
+      });
+      if (!user) throw new UnauthorizedError("No seeded user found for role: " + role);
+      req.dbUser = user;
+      return next();
+    }
+
     const auth = getAuth(req);
     if (!auth?.userId) {
       throw new UnauthorizedError();
