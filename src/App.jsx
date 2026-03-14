@@ -426,7 +426,6 @@ function SonnoHomes() {
   const [collapsed, setCollapsed] = useState(false);
   const [selectedInvestor, setSelectedInvestor] = useState(null);
   const [selectedProperty, setSelectedProperty] = useState(null);
-  const [notifications, setNotifications] = useState(false);
   const [fadeIn, setFadeIn] = useState(false);
   const investorLogin = INVESTOR_DATA_API.find(i => i.name === "Marco Bianchi") || INVESTOR_DATA_API[0] || INVESTOR_DATA[0]; // Demo investor: Marco Bianchi
 
@@ -540,24 +539,6 @@ function SonnoHomes() {
             {view === "admin" && <span style={{ fontSize: 11, fontWeight: 500, color: C.textLight, marginLeft: 10, fontFamily: FONT }}>Admin Panel</span>}
           </h1>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ position: "relative" }}>
-              <button onClick={() => setNotifications(!notifications)}
-                style={{ width: 36, height: 36, borderRadius: 9, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                🔔<span style={{ position: "absolute", top: 5, right: 5, width: 7, height: 7, borderRadius: "50%", background: C.red, border: "2px solid #fff" }} />
-              </button>
-              {notifications && (
-                <div style={{ position: "absolute", top: 44, right: 0, width: 300, background: "#fff", borderRadius: 12, boxShadow: "0 16px 48px rgba(0,0,0,0.12)", border: `1px solid ${C.border}`, zIndex: 99 }}>
-                  <div style={{ padding: "12px 16px", borderBottom: `1px solid ${C.border}`, fontWeight: 600, fontSize: 13 }}>Notifications</div>
-                  {["Distribution processed for Villa Serena", "New investor sign-up: Emma Williams", "Lease renewal due: Cascina Verde"].map((n, i) => (
-                    <div key={i} style={{ padding: "10px 16px", borderBottom: `1px solid ${C.border}`, fontSize: 12, color: C.text, cursor: "pointer" }}
-                      onMouseEnter={e => e.currentTarget.style.background = C.warm}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      {n}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: `linear-gradient(135deg, ${C.accent}40, ${C.accent}15)`, display: "flex", alignItems: "center", justifyContent: "center", color: C.accent, fontWeight: 700, fontSize: 12 }}>
                 {view === "admin" ? "SH" : investorLogin.name.split(" ").map(n => n[0]).join("")}
