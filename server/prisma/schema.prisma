@@ -59,6 +59,18 @@ enum DocumentType {
   other
 }
 
+enum OfferingStatus {
+  draft
+  open
+  funded
+}
+
+enum LOIStatus {
+  submitted
+  reviewed
+  withdrawn
+}
+
 
 // ── 1. ORGANIZATIONS ────────────────────────────────────────────────────────
 
@@ -80,6 +92,7 @@ model Organization {
   properties      Property[]
   documents       Document[]
   auditLogs       AuditLog[]
+  offerings       Offering[]
 
   @@map("organizations")
 }
@@ -109,6 +122,7 @@ model User {
   uploadedDocs    Document[]   @relation("DocUploader")
   docRecipients   DocumentRecipient[]
   auditLogs       AuditLog[]
+  lettersOfIntent LetterOfIntent[]
 
   @@unique([orgId, email], name: "uq_users_email_org")
   @@index([orgId], name: "idx_users_org")
@@ -168,6 +182,7 @@ model Property {
   investments     Investment[]
   reports         PerformanceReport[]
   documents       Document[]     @relation("PropertyDocs")
+  offerings       Offering[]
 
   @@index([orgId], name: "idx_properties_org")
   @@index([status], name: "idx_properties_status")
@@ -344,4 +359,58 @@ model AuditLog {
   @@index([action], name: "idx_audit_action")
   @@index([createdAt], name: "idx_audit_created")
   @@map("audit_log")
+}
+
+
+// ── 12. OFFERINGS ───────────────────────────────────────────────────────────
+
+model Offering {
+  id                   String         @id @default(uuid()) @db.Uuid
+  orgId                String         @map("org_id") @db.Uuid
+  propertyId           String         @map("property_id") @db.Uuid
+  title                String         @db.VarChar(255)
+  description          String
+  minimumInvestment    Decimal        @map("minimum_investment") @db.Decimal(14, 2)
+  targetRaise          Decimal        @map("target_raise") @db.Decimal(14, 2)
+  imageUrls            String[]       @map("image_urls")
+  projectedReturn      Decimal?       @map("projected_return") @db.Decimal(5, 2)
+  investmentTermMonths Int?           @map("investment_term_months") @db.SmallInt
+  status               OfferingStatus @default(draft)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
+
+  organization         Organization   @relation(fields: [orgId], references: [id])
+  property             Property       @relation(fields: [propertyId], references: [id])
+  lettersOfIntent      LetterOfIntent[]
+
+  @@index([orgId], name: "idx_offerings_org")
+  @@index([propertyId], name: "idx_offerings_property")
+  @@index([status], name: "idx_offerings_status")
+  @@map("offerings")
+}
+
+// ── 13. LETTERS OF INTENT ───────────────────────────────────────────────────
+
+model LetterOfIntent {
+  id                     String    @id @default(uuid()) @db.Uuid
+  offeringId             String    @map("offering_id") @db.Uuid
+  investorId             String    @map("investor_id") @db.Uuid
+  fullName               String    @map("full_name") @db.VarChar(255)
+  email                  String    @db.VarChar(255)
+  phone                  String    @db.VarChar(50)
+  intendedAmount         Decimal   @map("intended_amount") @db.Decimal(14, 2)
+  signatureAcknowledged  Boolean   @default(false) @map("signature_acknowledged")
+  status                 LOIStatus @default(submitted)
+  reviewedAt             DateTime? @map("reviewed_at") @db.Timestamptz()
+  submittedAt            DateTime  @default(now()) @map("submitted_at") @db.Timestamptz()
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  offering               Offering  @relation(fields: [offeringId], references: [id])
+  investor               User      @relation(fields: [investorId], references: [id])
+
+  @@index([offeringId], name: "idx_loi_offering")
+  @@index([investorId], name: "idx_loi_investor")
+  @@index([status], name: "idx_loi_status")
+  @@map("letters_of_intent")
 }

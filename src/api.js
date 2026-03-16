@@ -57,3 +57,14 @@ export const fetchDocuments = (role = "admin") => request("/api/v1/documents", {
 // ── Exports ─────────────────────────────────────────────────────────────────
 export const exportInvestorsCSV = () =>
   fetch(`${API_BASE}/api/v1/exports/investors`, { headers: { "X-Dev-Role": "admin" } }).then(r => r.text());
+
+// ── Offerings ───────────────────────────────────────────────────────────────
+export const fetchOfferings = (role = "admin") => request("/api/v1/offerings", { role });
+export const fetchOffering = (id, role = "admin") => request(`/api/v1/offerings/${id}`, { role });
+export const createOffering = (body) => request("/api/v1/offerings", { method: "POST", body });
+export const updateOffering = (id, body) => request(`/api/v1/offerings/${id}`, { method: "PATCH", body });
+
+// ── LOIs ────────────────────────────────────────────────────────────────────
+export const fetchOfferingLOIs = (offeringId) => request(`/api/v1/offerings/${offeringId}/lois`);
+export const submitLOI = (offeringId, body) => request(`/api/v1/offerings/${offeringId}/lois`, { method: "POST", body, role: "investor" });
+export const updateLOIStatus = (offeringId, loiId, body) => request(`/api/v1/offerings/${offeringId}/lois/${loiId}`, { method: "PATCH", body });

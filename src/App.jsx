@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { DataProvider, useData } from "./DataContext.jsx";
+import * as api from "./api.js";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    SONNO HOMES — Investment Management Platform
@@ -420,12 +421,13 @@ export default function SonnoHomesApp() {
 }
 
 function SonnoHomes() {
-  const { properties: PROPERTIES_API, investorData: INVESTOR_DATA_API, reports, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, loading, error, addReport, refresh } = useData();
+  const { properties: PROPERTIES_API, investorData: INVESTOR_DATA_API, reports, offerings: OFFERINGS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, loading, error, addReport, refresh } = useData();
   const [view, setView] = useState("admin"); // admin or investor
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [selectedInvestor, setSelectedInvestor] = useState(null);
   const [selectedProperty, setSelectedProperty] = useState(null);
+  const [selectedOffering, setSelectedOffering] = useState(null);
   const [fadeIn, setFadeIn] = useState(false);
   const investorLogin = INVESTOR_DATA_API.find(i => i.name === "Marco Bianchi") || INVESTOR_DATA_API[0] || INVESTOR_DATA[0]; // Demo investor: Marco Bianchi
 
@@ -456,13 +458,15 @@ function SonnoHomes() {
     { id: "dashboard", label: "Dashboard", icon: "◫" },
     { id: "investors", label: "Investors", icon: "◉" },
     { id: "properties", label: "Properties", icon: "⊞" },
+    { id: "offerings", label: "Offerings", icon: "📋" },
     { id: "distributions", label: "Distributions", icon: "◈" },
-    { id: "create-report", label: "Create Report", icon: "📋" },
+    { id: "create-report", label: "Create Report", icon: "✎" },
     { id: "reports", label: "Reports & Export", icon: "▤" },
     { id: "settings", label: "Settings", icon: "⚙" },
   ];
   const investorNav = [
     { id: "overview", label: "My Overview", icon: "◫" },
+    { id: "offerings", label: "Offerings", icon: "📋" },
     { id: "distributions", label: "My Distributions", icon: "◈" },
     { id: "properties", label: "My Properties", icon: "⊞" },
     { id: "documents", label: "Documents", icon: "▤" },
@@ -554,15 +558,19 @@ function SonnoHomes() {
         {/* Content */}
         <div style={{ flex: 1, overflow: "auto", padding: 28, opacity: fadeIn ? 1 : 0, transform: fadeIn ? "translateY(0)" : "translateY(6px)", transition: "all 0.35s ease", minWidth: 0 }}>
           <div style={{ width: "100%", minWidth: 0 }}>
-            {(() => { const apiData = { investorData: INVESTOR_DATA_API, properties: PROPERTIES_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, refresh }; const reps = reports.length > 0 ? reports : INITIAL_REPORTS; return (<>
+            {(() => { const apiData = { investorData: INVESTOR_DATA_API, properties: PROPERTIES_API, offerings: OFFERINGS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, refresh }; const reps = reports.length > 0 ? reports : INITIAL_REPORTS; return (<>
             {view === "admin" && page === "dashboard" && <AdminDashboard onViewInvestor={i => { setSelectedInvestor(i); setPage("investors"); }} apiData={apiData} />}
             {view === "admin" && page === "investors" && <AdminInvestors selected={selectedInvestor} onSelect={setSelectedInvestor} apiData={apiData} />}
             {view === "admin" && page === "properties" && <AdminProperties apiData={apiData} />}
+            {view === "admin" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={true} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} />}
+            {view === "admin" && page === "offering-detail" && selectedOffering && <OfferingDetailView offering={selectedOffering} apiData={apiData} isAdmin={true} onBack={() => setPage("offerings")} refresh={refresh} />}
             {view === "admin" && page === "distributions" && <AdminDistributions apiData={apiData} />}
             {view === "admin" && page === "create-report" && <AdminCreateReport reports={reps} onAddReport={handleAddReport} apiData={apiData} />}
             {view === "admin" && page === "reports" && <AdminReports apiData={apiData} />}
             {view === "admin" && page === "settings" && <AdminSettings />}
             {view === "investor" && page === "overview" && <InvestorOverview investor={investorLogin} onViewProperty={p => { setSelectedProperty(p); setPage("properties"); }} reports={reps} apiData={apiData} />}
+            {view === "investor" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={false} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} />}
+            {view === "investor" && page === "offering-detail" && selectedOffering && <OfferingDetailView offering={selectedOffering} apiData={apiData} isAdmin={false} onBack={() => setPage("offerings")} refresh={refresh} />}
             {view === "investor" && page === "distributions" && <InvestorDistributions investor={investorLogin} apiData={apiData} />}
             {view === "investor" && page === "properties" && <InvestorProperties investor={investorLogin} selectedProperty={selectedProperty} onSelectProperty={setSelectedProperty} reports={reps} apiData={apiData} />}
             {view === "investor" && page === "documents" && <InvestorDocuments investor={investorLogin} reports={reps} apiData={apiData} />}
@@ -1870,6 +1878,367 @@ function InvestorProfile({ investor, apiData }) {
           </div>
         ))}
       </Card>
+    </>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// OFFERINGS COMPONENTS
+// ═════════════════════════════════════════════════════════════════════════════
+
+function OfferingCard({ offering, onClick }) {
+  const prop = offering.property || {};
+  const isFunded = offering.status === "funded";
+  const typeIcons = { Villa: "🏡", Lakehouse: "☀️", Apartment: "🏛️", Trullo: "🏠", Farmhouse: "🍇", Loft: "✨", Masseria: "🏰", Penthouse: "🌇" };
+  const icon = typeIcons[prop.propertyType] || "🏠";
+
+  return (
+    <Card hover onClick={onClick} style={{ cursor: "pointer", position: "relative", overflow: "hidden" }}>
+      {isFunded && (
+        <div style={{ position: "absolute", top: 14, right: -28, background: C.green, color: "#fff", fontSize: 10, fontWeight: 700, padding: "4px 36px", transform: "rotate(45deg)", zIndex: 2, letterSpacing: "0.05em" }}>FUNDED</div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${C.accent}25, ${C.accent}08)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{icon}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{offering.title}</div>
+          <div style={{ fontSize: 12, color: C.textMid }}>{prop.location || "—"}</div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Min. Investment</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>{euro(Number(offering.minimumInvestment))}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Raise</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>{euro(Number(offering.targetRaise))}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Projected Return</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.green }}>{offering.projectedReturn ? `${offering.projectedReturn}%` : "—"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</div>
+          <Badge label={offering.status} variant={offering.status === "open" ? "default" : offering.status === "funded" ? "green" : "muted"} />
+        </div>
+      </div>
+      {offering.description && (
+        <div style={{ fontSize: 12, color: C.textMid, lineHeight: 1.5, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+          {offering.description.length > 120 ? offering.description.slice(0, 120) + "…" : offering.description}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function OfferingsListView({ apiData, isAdmin, onViewDetail }) {
+  const offerings = apiData?.offerings || [];
+  const properties = apiData?.properties || [];
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ propertyId: "", title: "", description: "", minimumInvestment: "", targetRaise: "", projectedReturn: "" });
+  const [error, setError] = useState("");
+
+  const handleCreate = async () => {
+    setError("");
+    if (!form.propertyId || !form.title || !form.minimumInvestment || !form.targetRaise) {
+      setError("Please fill in all required fields"); return;
+    }
+    const min = Number(form.minimumInvestment), target = Number(form.targetRaise);
+    if (min > target) { setError("Minimum investment cannot exceed target raise"); return; }
+    try {
+      setCreating(true);
+      await api.createOffering({
+        propertyId: form.propertyId, title: form.title, description: form.description,
+        minimumInvestment: min, targetRaise: target,
+        projectedReturn: form.projectedReturn ? Number(form.projectedReturn) : undefined,
+      });
+      setShowCreate(false);
+      setForm({ propertyId: "", title: "", description: "", minimumInvestment: "", targetRaise: "", projectedReturn: "" });
+      apiData.refresh?.();
+    } catch (e) { setError(e.message); } finally { setCreating(false); }
+  };
+
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 13, color: C.textMid }}>{offerings.length} offering{offerings.length !== 1 ? "s" : ""}</div>
+        </div>
+        {isAdmin && (
+          <button onClick={() => setShowCreate(true)} style={{ padding: "9px 20px", borderRadius: 9, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>+ New Offering</button>
+        )}
+      </div>
+
+      {offerings.length === 0 ? (
+        <Card><div style={{ textAlign: "center", padding: 40, color: C.textMid }}>No offerings available yet.</div></Card>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 18 }}>
+          {offerings.map(o => <OfferingCard key={o.id} offering={o} onClick={() => onViewDetail(o)} />)}
+        </div>
+      )}
+
+      {/* Create Offering Modal */}
+      {showCreate && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setShowCreate(false)}>
+          <div style={{ background: C.white, borderRadius: 16, padding: 28, width: 480, maxHeight: "80vh", overflow: "auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 20 }}>Create New Offering</div>
+            {error && <div style={{ background: C.redBg, color: C.red, padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Property *</label>
+                <select value={form.propertyId} onChange={e => setForm(f => ({ ...f, propertyId: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, background: C.white }}>
+                  <option value="">Select property…</option>
+                  {properties.map(p => <option key={p.id} value={p.id}>{p.name} — {p.location}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Title *</label>
+                <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Villa Serena Investment Package" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Description</label>
+                <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, resize: "vertical", boxSizing: "border-box" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Min. Investment ($) *</label>
+                  <input type="number" value={form.minimumInvestment} onChange={e => setForm(f => ({ ...f, minimumInvestment: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Target Raise ($) *</label>
+                  <input type="number" value={form.targetRaise} onChange={e => setForm(f => ({ ...f, targetRaise: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Projected Return (%)</label>
+                <input type="number" step="0.1" value={form.projectedReturn} onChange={e => setForm(f => ({ ...f, projectedReturn: e.target.value }))} placeholder="e.g. 8.5" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
+              <button onClick={() => setShowCreate(false)} style={{ padding: "9px 20px", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.textMid, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+              <button onClick={handleCreate} disabled={creating} style={{ padding: "9px 20px", borderRadius: 9, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT, opacity: creating ? 0.6 : 1 }}>{creating ? "Creating…" : "Create Offering"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function LOIFormModal({ offering, onClose, onSuccess }) {
+  const [form, setForm] = useState({ fullName: "", email: "", phone: "", intendedAmount: "", signatureAcknowledged: false });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async () => {
+    setError("");
+    if (!form.fullName || !form.email || !form.intendedAmount) { setError("Please fill in all required fields"); return; }
+    if (!form.signatureAcknowledged) { setError("You must acknowledge the signature to proceed"); return; }
+    const amount = Number(form.intendedAmount);
+    if (amount < Number(offering.minimumInvestment)) { setError(`Minimum investment is ${euro(Number(offering.minimumInvestment))}`); return; }
+    try {
+      setSubmitting(true);
+      await api.submitLOI(offering.id, { fullName: form.fullName, email: form.email, phone: form.phone || undefined, intendedAmount: amount, signatureAcknowledged: true });
+      setSuccess(true);
+      setTimeout(() => { onSuccess?.(); onClose(); }, 2000);
+    } catch (e) { setError(e.message); } finally { setSubmitting(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
+      <div style={{ background: C.white, borderRadius: 16, padding: 28, width: 460, maxHeight: "80vh", overflow: "auto" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 6 }}>Letter of Intent</div>
+        <div style={{ fontSize: 13, color: C.textMid, marginBottom: 20 }}>{offering.title}</div>
+
+        {success ? (
+          <div style={{ textAlign: "center", padding: 30 }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>✓</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.green }}>LOI Submitted Successfully</div>
+            <div style={{ fontSize: 13, color: C.textMid, marginTop: 8 }}>Our team will review your submission and be in touch shortly.</div>
+          </div>
+        ) : (
+          <>
+            {error && <div style={{ background: C.redBg, color: C.red, padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 14 }}>{error}</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Full Name *</label>
+                <input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Email *</label>
+                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Phone</label>
+                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Intended Investment ($) *</label>
+                <input type="number" value={form.intendedAmount} onChange={e => setForm(f => ({ ...f, intendedAmount: e.target.value }))} placeholder={`Min: ${euro(Number(offering.minimumInvestment))}`} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+              </div>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", padding: "10px 12px", borderRadius: 8, background: C.warm, border: `1px solid ${form.signatureAcknowledged ? C.accent : C.border}` }}>
+                <input type="checkbox" checked={form.signatureAcknowledged} onChange={e => setForm(f => ({ ...f, signatureAcknowledged: e.target.checked }))} style={{ marginTop: 2 }} />
+                <span style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>I acknowledge that this Letter of Intent represents my genuine interest in investing in this offering. I understand this is not a binding commitment and that Sonno Homes will contact me to finalize the investment.</span>
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
+              <button onClick={onClose} style={{ padding: "9px 20px", borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.textMid, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Cancel</button>
+              <button onClick={handleSubmit} disabled={submitting} style={{ padding: "9px 20px", borderRadius: 9, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT, opacity: submitting ? 0.6 : 1 }}>{submitting ? "Submitting…" : "Submit LOI"}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminLOITable({ offeringId }) {
+  const [lois, setLois] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.fetchOfferingLOIs(offeringId).then(setLois).catch(() => setLois([])).finally(() => setLoading(false));
+  }, [offeringId]);
+
+  const markReviewed = async (loiId) => {
+    try {
+      await api.updateLOIStatus(offeringId, loiId, { status: "reviewed" });
+      setLois(prev => prev.map(l => l.id === loiId ? { ...l, status: "reviewed", reviewedAt: new Date().toISOString() } : l));
+    } catch (e) { console.error("Failed to update LOI:", e); }
+  };
+
+  const totalAmount = lois.reduce((s, l) => s + Number(l.intendedAmount), 0);
+
+  if (loading) return <div style={{ padding: 20, color: C.textMid, fontSize: 13 }}>Loading LOIs…</div>;
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 20, marginBottom: 16, padding: "12px 16px", background: C.warm, borderRadius: 10 }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Total LOIs</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.dark }}>{lois.length}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Total Intended</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.accent }}>{euro(totalAmount)}</div>
+        </div>
+      </div>
+
+      {lois.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 24, color: C.textMid, fontSize: 13 }}>No LOIs submitted yet.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                {["Investor", "Email", "Phone", "Amount", "Date", "Status", ""].map(h => (
+                  <th key={h} style={{ textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lois.map(l => (
+                <tr key={l.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ padding: "10px" }}>{l.fullName}</td>
+                  <td style={{ padding: "10px", color: C.textMid }}>{l.email}</td>
+                  <td style={{ padding: "10px", color: C.textMid }}>{l.phone || "—"}</td>
+                  <td style={{ padding: "10px", fontWeight: 600 }}>{euro(Number(l.intendedAmount))}</td>
+                  <td style={{ padding: "10px", color: C.textMid }}>{new Date(l.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                  <td style={{ padding: "10px" }}><Badge label={l.status} variant={l.status === "reviewed" ? "green" : "default"} /></td>
+                  <td style={{ padding: "10px" }}>
+                    {l.status === "submitted" && (
+                      <button onClick={() => markReviewed(l.id)} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Mark Reviewed</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfferingDetailView({ offering, apiData, isAdmin, onBack, refresh }) {
+  const [showLOI, setShowLOI] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const prop = offering.property || {};
+  const isFunded = offering.status === "funded";
+  const typeIcons = { Villa: "🏡", Lakehouse: "☀️", Apartment: "🏛️", Trullo: "🏠", Farmhouse: "🍇", Loft: "✨", Masseria: "🏰", Penthouse: "🌇" };
+  const icon = typeIcons[prop.propertyType] || "🏠";
+
+  const handleStatusChange = async (newStatus) => {
+    try {
+      setStatusUpdating(true);
+      await api.updateOffering(offering.id, { status: newStatus });
+      refresh?.();
+      onBack();
+    } catch (e) { alert(e.message); } finally { setStatusUpdating(false); }
+  };
+
+  return (
+    <>
+      <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMid, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT, marginBottom: 18 }}>← Back to Offerings</button>
+
+      <Card style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: `linear-gradient(135deg, ${C.accent}25, ${C.accent}08)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>{icon}</div>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{offering.title}</div>
+              <div style={{ fontSize: 13, color: C.textMid }}>{prop.name} — {prop.location || "—"}</div>
+            </div>
+          </div>
+          <Badge label={offering.status} variant={offering.status === "open" ? "default" : offering.status === "funded" ? "green" : "muted"} />
+        </div>
+
+        {offering.description && (
+          <div style={{ fontSize: 13, color: C.text, lineHeight: 1.7, marginBottom: 20, padding: "14px 16px", background: C.warm, borderRadius: 10 }}>{offering.description}</div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
+          {[
+            { label: "Minimum Investment", value: euro(Number(offering.minimumInvestment)) },
+            { label: "Target Raise", value: euro(Number(offering.targetRaise)) },
+            { label: "Projected Return", value: offering.projectedReturn ? `${offering.projectedReturn}%` : "—" },
+            { label: "Property Type", value: prop.propertyType || "—" },
+            { label: "Bedrooms", value: prop.bedrooms || "—" },
+            { label: "Created", value: new Date(offering.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+          ].map(item => (
+            <div key={item.label}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{item.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.dark }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+        {!isAdmin && !isFunded && offering.status === "open" && (
+          <button onClick={() => setShowLOI(true)} style={{ padding: "11px 28px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.accent}, ${C.accentSoft})`, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: `0 4px 14px ${C.accent}40` }}>Invest Now</button>
+        )}
+        {isAdmin && offering.status === "draft" && (
+          <button onClick={() => handleStatusChange("open")} disabled={statusUpdating} style={{ padding: "10px 22px", borderRadius: 9, border: "none", background: C.green, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT, opacity: statusUpdating ? 0.6 : 1 }}>Publish (Open)</button>
+        )}
+        {isAdmin && offering.status === "open" && (
+          <button onClick={() => handleStatusChange("funded")} disabled={statusUpdating} style={{ padding: "10px 22px", borderRadius: 9, border: "none", background: C.blue, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT, opacity: statusUpdating ? 0.6 : 1 }}>Mark as Funded</button>
+        )}
+      </div>
+
+      {/* Admin LOI Table */}
+      {isAdmin && (
+        <Card>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 16 }}>Letters of Intent</div>
+          <AdminLOITable offeringId={offering.id} />
+        </Card>
+      )}
+
+      {/* LOI Modal */}
+      {showLOI && <LOIFormModal offering={offering} onClose={() => setShowLOI(false)} onSuccess={() => refresh?.()} />}
     </>
   );
 }

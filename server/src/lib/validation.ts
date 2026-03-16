@@ -148,3 +148,45 @@ export const updateExpenseSchema = z.object({
   amount: z.number().min(0).optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
+
+// Offerings
+export const createOfferingSchema = z
+  .object({
+    propertyId: z.string().uuid(),
+    title: z.string().min(1).max(255),
+    description: z.string().min(1),
+    minimumInvestment: z.number().min(0),
+    targetRaise: z.number().min(0),
+    imageUrls: z.array(z.string().url()).max(5).optional(),
+    projectedReturn: z.number().min(0).max(100).optional(),
+    investmentTermMonths: z.number().int().min(1).optional(),
+  })
+  .refine((data) => data.minimumInvestment <= data.targetRaise, {
+    message: "Minimum investment cannot exceed target raise amount",
+    path: ["minimumInvestment"],
+  });
+
+export const updateOfferingSchema = z.object({
+  title: z.string().min(1).max(255).optional(),
+  description: z.string().min(1).optional(),
+  minimumInvestment: z.number().min(0).optional(),
+  targetRaise: z.number().min(0).optional(),
+  imageUrls: z.array(z.string().url()).max(5).optional(),
+  projectedReturn: z.number().min(0).max(100).optional(),
+  investmentTermMonths: z.number().int().min(1).optional(),
+  status: z.enum(["draft", "open", "funded"]).optional(),
+});
+
+// Letters of Intent
+export const createLOISchema = z.object({
+  fullName: z.string().min(1).max(255),
+  email: z.string().email(),
+  phone: z.string().min(1).max(50),
+  intendedAmount: z.number().min(0),
+  signatureAcknowledged: z.literal(true),
+});
+
+export const updateLOISchema = z.object({
+  status: z.enum(["submitted", "reviewed", "withdrawn"]),
+});
+

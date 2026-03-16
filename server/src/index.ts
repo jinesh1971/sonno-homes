@@ -15,6 +15,7 @@ import documentRoutes from "./routes/documents.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import exportRoutes from "./routes/exports.js";
 import auditRoutes from "./routes/audit.js";
+import offeringRoutes from "./routes/offerings.js";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -56,6 +57,7 @@ app.use("/api/v1/documents", documentRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/exports", exportRoutes);
 app.use("/api/v1/audit-log", auditRoutes);
+app.use("/api/v1/offerings", offeringRoutes);
 
 // Serve frontend static files in production
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

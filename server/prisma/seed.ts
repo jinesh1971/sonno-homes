@@ -142,12 +142,28 @@ async function main() {
     });
   }
 
+  // 7. Sample offerings
+  const offeringData = [
+    { id: "30000000-0000-0000-0000-000000000001", propertyId: properties[0].id, title: "Villa Serena Investment Package", description: "Invest in a stunning 4-bedroom villa on the Amalfi Coast. Prime short-term rental location with consistent high-season demand and year-round tourism appeal.", minimumInvestment: 25000, targetRaise: 200000, projectedReturn: 8.5, status: "open" as const },
+    { id: "30000000-0000-0000-0000-000000000002", propertyId: properties[1].id, title: "Lake Como Lakehouse Opportunity", description: "Beautiful lakehouse property on Lake Como with breathtaking views. Strong rental performance driven by luxury tourism market.", minimumInvestment: 20000, targetRaise: 150000, projectedReturn: 7.8, status: "open" as const },
+    { id: "30000000-0000-0000-0000-000000000003", propertyId: properties[3].id, title: "Trullo Bianco — Puglia Heritage", description: "Unique trullo property in Alberobello, a UNESCO World Heritage site. High demand from cultural tourism and growing Puglia market.", minimumInvestment: 15000, targetRaise: 100000, projectedReturn: 9.2, status: "funded" as const },
+  ];
+
+  for (const o of offeringData) {
+    await prisma.offering.upsert({
+      where: { id: o.id },
+      update: {},
+      create: { ...o, orgId: org.id },
+    });
+  }
+
   console.log("✅ Seed complete!");
   console.log(`   Organization: ${org.name}`);
   console.log(`   Properties: ${properties.length}`);
   console.log(`   Investors: ${investors.length}`);
   console.log(`   Investments: ${investmentMap.length}`);
   console.log(`   Reports: 1 (published)`);
+  console.log(`   Offerings: ${offeringData.length}`);
 }
 
 main()
