@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { DataProvider, useData } from "./DataContext.jsx";
 import { Show, SignInButton, SignUpButton, UserButton, useUser, useAuth } from "@clerk/react";
 import * as api from "./api.js";
@@ -471,17 +471,17 @@ function AuthenticatedApp() {
   const { getToken } = useAuth();
   const [userRole, setUserRole] = useState(null);
   const [syncing, setSyncing] = useState(true);
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   // Sync Clerk user with our backend and determine role
   useEffect(() => {
     if (!isLoaded || !user) return;
     let cancelled = false;
-    let hasInitialRole = false;
+    let initialDone = false;
     const syncRole = async () => {
       try {
-        // Only show loading spinner on first sync, never on polling
-        if (!cancelled && !hasInitialRole) setSyncing(true);
-        const token = await getToken();
+        const token = await getTokenRef.current();
         const res = await fetch("/api/v1/auth/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -495,34 +495,27 @@ function AuthenticatedApp() {
         });
         const data = await res.json();
         if (!cancelled) {
-          console.log("Auth sync response:", data);
           if (data.success) {
             const newRole = data.data.role || "lead";
             setUserRole(prev => prev === newRole ? prev : newRole);
-            hasInitialRole = true;
-          } else {
-            console.warn("Auth sync failed:", data);
-            if (!hasInitialRole) {
-              setUserRole("lead");
-              hasInitialRole = true;
-            }
+          } else if (!initialDone) {
+            setUserRole("lead");
           }
         }
       } catch (e) {
-        console.error("Auth sync fetch failed:", e);
-        if (!cancelled && !hasInitialRole) {
-          setUserRole("lead");
-          hasInitialRole = true;
-        }
+        console.error("Auth sync error:", e);
+        if (!cancelled && !initialDone) setUserRole("lead");
       } finally {
-        if (!cancelled) setSyncing(false);
+        if (!cancelled) {
+          initialDone = true;
+          setSyncing(false);
+        }
       }
     };
     syncRole();
-    // Re-check role every 30s to pick up promotions (silently, no loading spinner)
     const interval = setInterval(syncRole, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [isLoaded, user, getToken]);
+  }, [isLoaded, user]);
 
   if (!isLoaded || syncing) {
     return (
