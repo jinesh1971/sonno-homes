@@ -33,7 +33,38 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       prisma.investment.count({ where }),
     ]);
 
-    res.json({ success: true, data: { investments, total, page, limit } });
+    const propertyInvestments = investments.map((inv) => ({
+      ...inv,
+      productType: "property" as const,
+    }));
+
+    if (req.dbUser!.role === "investor") {
+      const fundInvestments = await prisma.fundInvestment.findMany({
+        where: { investorId: req.dbUser!.id, status: "active", deletedAt: null },
+        include: {
+          fund: { select: { id: true, name: true, status: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      const fundInvestmentsWithType = fundInvestments.map((inv) => ({
+        ...inv,
+        productType: "fund" as const,
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          investments: propertyInvestments,
+          fundInvestments: fundInvestmentsWithType,
+          total,
+          page,
+          limit,
+        },
+      });
+    } else {
+      res.json({ success: true, data: { investments: propertyInvestments, total, page, limit } });
+    }
   } catch (err) { next(err); }
 });
 

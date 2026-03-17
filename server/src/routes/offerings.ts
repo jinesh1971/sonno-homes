@@ -35,6 +35,7 @@ router.post("/", requireRole("admin"), async (req: Request, res: Response, next:
 });
 
 // GET /offerings — investors see only open, admins see all
+// Supports ?type=fund|property|all to filter by product type
 router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const where: any = { orgId: req.dbUser!.orgId };
@@ -43,25 +44,39 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       where.status = "open";
     }
 
+    // Filter by product type
+    const typeFilter = req.query.type as string | undefined;
+    if (typeFilter === "fund") {
+      where.fundId = { not: null };
+    } else if (typeFilter === "property") {
+      where.fundId = null;
+    }
+    // "all" or no param → no additional filter
+
     const offerings = await prisma.offering.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      include: { property: true },
+      include: { property: true, fund: true },
     });
 
-    res.json({ success: true, data: offerings });
+    const data = offerings.map((o) => ({
+      ...o,
+      productType: o.fundId ? "fund" : "property",
+    }));
+
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
 });
 
-// GET /offerings/:id — get offering detail with property info
+// GET /offerings/:id — get offering detail with property and fund info
 router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = uuidParam.parse(req.params.id);
     const offering = await prisma.offering.findFirst({
       where: { id, orgId: req.dbUser!.orgId },
-      include: { property: true },
+      include: { property: true, fund: true },
     });
     if (!offering) throw new NotFoundError("Offering", id);
 
@@ -70,7 +85,12 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
       throw new NotFoundError("Offering", id);
     }
 
-    res.json({ success: true, data: offering });
+    const data = {
+      ...offering,
+      productType: offering.fundId ? "fund" : "property",
+    };
+
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
@@ -111,6 +131,7 @@ router.post("/:id/lois", requireRole("investor"), async (req: Request, res: Resp
 
     const offering = await prisma.offering.findFirst({
       where: { id: offeringId, orgId: req.dbUser!.orgId },
+      include: { fund: true },
     });
     if (!offering) throw new NotFoundError("Offering", offeringId);
 
@@ -122,6 +143,16 @@ router.post("/:id/lois", requireRole("investor"), async (req: Request, res: Resp
       throw new ValidationError(
         `Intended amount must be at least ${offering.minimumInvestment}`
       );
+    }
+
+    // For fund offerings, also validate against the fund's minimum investment
+    if (offering.fund && offering.fund.minimumInvestment !== null) {
+      const fundMin = Number(offering.fund.minimumInvestment);
+      if (data.intendedAmount < fundMin) {
+        throw new ValidationError(
+          `Intended amount must be at least ${offering.fund.minimumInvestment}`
+        );
+      }
     }
 
     const loi = await prisma.letterOfIntent.create({

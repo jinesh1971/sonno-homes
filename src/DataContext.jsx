@@ -139,6 +139,7 @@ export function DataProvider({ children }) {
   const [investorData, setInvestorData] = useState([]);
   const [reports, setReports] = useState([]);
   const [offerings, setOfferings] = useState([]);
+  const [funds, setFunds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -147,12 +148,13 @@ export function DataProvider({ children }) {
       setLoading(true);
       setError(null);
 
-      const [propRes, userRes, invRes, reportRes, offeringsRes] = await Promise.all([
+      const [propRes, userRes, invRes, reportRes, offeringsRes, fundsRes] = await Promise.all([
         api.fetchProperties(),
         api.fetchUsers(),
         api.fetchInvestments(),
         api.fetchReports(),
         api.fetchOfferings().catch(() => []),
+        api.fetchFunds().catch(() => []),
       ]);
 
       // Transform properties
@@ -173,6 +175,9 @@ export function DataProvider({ children }) {
 
       // Set offerings
       setOfferings(Array.isArray(offeringsRes) ? offeringsRes : (offeringsRes || []));
+
+      // Set funds
+      setFunds(Array.isArray(fundsRes) ? fundsRes : (fundsRes?.data || fundsRes || []));
 
     } catch (err) {
       console.error("Failed to load data from API:", err);
@@ -257,6 +262,7 @@ export function DataProvider({ children }) {
     investorData,
     reports,
     offerings,
+    funds,
     totalInvested,
     totalDistributed,
     avgROI,

@@ -69,3 +69,52 @@ export async function sendLOINotification(payload: LOINotificationPayload): Prom
   console.log(`  Subject: ${subject}`);
   console.log(`  Body:\n${body}`);
 }
+
+export interface FundReportNotificationPayload {
+  fundName: string;
+  quarterLabel: string; // e.g. "Q2 2025"
+  investorEmails: string[];
+}
+
+/**
+ * Sends a fund report publication notification to all fund investors.
+ * Follows the same fire-and-forget pattern as sendLOINotification.
+ * In dev mode (no SMTP config), logs to console instead of sending.
+ */
+export async function sendFundReportNotification(
+  payload: FundReportNotificationPayload
+): Promise<void> {
+  const { fundName, quarterLabel, investorEmails } = payload;
+
+  if (investorEmails.length === 0) return;
+
+  const subject = `Fund Report Published: ${fundName} — ${quarterLabel}`;
+  const body = [
+    `A new quarterly fund report has been published.`,
+    ``,
+    `Fund: ${fundName}`,
+    `Quarter: ${quarterLabel}`,
+    ``,
+    `Log in to view the full report and performance details.`,
+  ].join("\n");
+
+  try {
+    if (!process.env.SMTP_HOST) {
+      console.log(`[EmailService] Fund Report Notification`);
+      console.log(`  To: ${investorEmails.join(", ")}`);
+      console.log(`  Subject: ${subject}`);
+      console.log(`  Body:\n${body}`);
+      return;
+    }
+
+    // Production path — requires nodemailer and SMTP env vars.
+    // Uncomment and install nodemailer when SMTP is configured.
+    console.log(`[EmailService] Fund Report Notification (SMTP configured but nodemailer not installed)`);
+    console.log(`  To: ${investorEmails.join(", ")}`);
+    console.log(`  Subject: ${subject}`);
+    console.log(`  Body:\n${body}`);
+  } catch (err) {
+    console.error(`[EmailService] Failed to send fund report notification for ${fundName}:`, err);
+  }
+}
+

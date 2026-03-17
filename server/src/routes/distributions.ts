@@ -41,7 +41,47 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       prisma.distribution.count({ where }),
     ]);
 
-    res.json({ success: true, data: { distributions, total, page, limit } });
+    const propertyDistributions = distributions.map((d) => ({
+      ...d,
+      productType: "property" as const,
+    }));
+
+    if (req.dbUser!.role === "investor") {
+      const fundDistributions = await prisma.distribution.findMany({
+        where: {
+          fundInvestmentId: { not: null },
+          fundInvestment: { investorId: req.dbUser!.id },
+        },
+        include: {
+          fundInvestment: {
+            select: {
+              id: true,
+              fund: { select: { id: true, name: true } },
+            },
+          },
+        },
+        orderBy: { periodStart: "desc" },
+      });
+
+      const fundDistributionsWithType = fundDistributions.map((d) => ({
+        ...d,
+        productType: "fund" as const,
+        fundName: d.fundInvestment?.fund.name,
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          distributions: propertyDistributions,
+          fundDistributions: fundDistributionsWithType,
+          total,
+          page,
+          limit,
+        },
+      });
+    } else {
+      res.json({ success: true, data: { distributions: propertyDistributions, total, page, limit } });
+    }
   } catch (err) { next(err); }
 });
 

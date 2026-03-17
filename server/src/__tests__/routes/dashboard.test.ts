@@ -10,6 +10,8 @@ vi.mock("../../lib/prisma.js", () => ({
     user: { count: vi.fn() },
     distribution: { findMany: vi.fn() },
     performanceReport: { findMany: vi.fn() },
+    fundInvestment: { findMany: vi.fn() },
+    fund: { count: vi.fn() },
   },
 }));
 
@@ -90,6 +92,16 @@ describe("Dashboard routes", () => {
     (prisma.performanceReport.findMany as any).mockResolvedValue([
       { grossRevenue: "8000", totalExpenses: "3000", managementFee: "1000" },
     ]);
+    (prisma.fundInvestment.findMany as any)
+      .mockResolvedValueOnce([
+        { amount: "200000", investorId: "inv-1" },
+        { amount: "100000", investorId: "inv-2" },
+      ])
+      .mockResolvedValueOnce([
+        { investorId: "inv-1" },
+        { investorId: "inv-2" },
+      ]);
+    (prisma.fund.count as any).mockResolvedValue(3);
 
     const app = createApp();
     const res = await request(app, "GET", "/api/v1/dashboard/admin");
@@ -102,6 +114,11 @@ describe("Dashboard routes", () => {
     expect(res.body.data.totalDistributed).toBe(3500);
     expect(res.body.data.totalRevenue).toBe(8000);
     expect(res.body.data.netIncome).toBe(4000); // 8000 - 3000 - 1000
+    expect(res.body.data.fundMetrics).toEqual({
+      totalFundAUM: 300000,
+      activeFundCount: 3,
+      fundInvestorCount: 2,
+    });
   });
 
   it("GET /api/v1/dashboard/admin rejects investor", async () => {
@@ -128,6 +145,10 @@ describe("Dashboard routes", () => {
         ],
       },
     ]);
+    (prisma.fundInvestment.findMany as any).mockResolvedValue([
+      { amount: "75000", distributions: [{ amount: "3000", status: "paid" }, { amount: "2000", status: "pending" }] },
+      { amount: "25000", distributions: [{ amount: "1000", status: "paid" }] },
+    ]);
 
     const app = createApp();
     const res = await request(app, "GET", "/api/v1/dashboard/investor", undefined, { "x-test-role": "investor" });
@@ -140,6 +161,12 @@ describe("Dashboard routes", () => {
     // Check allocation percentages
     expect(res.body.data.allocation[0].percentage).toBeCloseTo(66.67, 1);
     expect(res.body.data.allocation[1].percentage).toBeCloseTo(33.33, 1);
+    // Fund metrics
+    expect(res.body.data.fundMetrics).toEqual({
+      totalFundInvested: 100000,
+      totalFundDistributions: 4000, // 3000 paid + 1000 paid (pending excluded)
+      fundROI: 4, // (4000 / 100000) * 100
+    });
   });
 
   it("GET /api/v1/dashboard/investor rejects admin", async () => {

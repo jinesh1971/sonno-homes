@@ -68,3 +68,26 @@ export const updateOffering = (id, body) => request(`/api/v1/offerings/${id}`, {
 export const fetchOfferingLOIs = (offeringId) => request(`/api/v1/offerings/${offeringId}/lois`);
 export const submitLOI = (offeringId, body) => request(`/api/v1/offerings/${offeringId}/lois`, { method: "POST", body, role: "investor" });
 export const updateLOIStatus = (offeringId, loiId, body) => request(`/api/v1/offerings/${offeringId}/lois/${loiId}`, { method: "PATCH", body });
+
+// ── Funds ───────────────────────────────────────────────────────────────────
+export const fetchFunds = () => request("/api/v1/funds");
+export const fetchFund = (id) => request(`/api/v1/funds/${id}`);
+export const createFund = (body) => request("/api/v1/funds", { method: "POST", body });
+export const updateFund = (id, body) => request(`/api/v1/funds/${id}`, { method: "PATCH", body });
+export const addFundProperties = (id, body) =>
+  request(`/api/v1/funds/${id}/properties`, { method: "POST", body });
+export const removeFundProperty = (id, propertyId) =>
+  request(`/api/v1/funds/${id}/properties/${propertyId}`, { method: "DELETE" });
+export const fetchFundInvestments = (id) => request(`/api/v1/funds/${id}/investments`);
+export const createFundInvestment = (id, body) =>
+  request(`/api/v1/funds/${id}/investments`, { method: "POST", body });
+export const fetchFundReports = (id) => request(`/api/v1/funds/${id}/reports`);
+export const fetchFundReport = (id, reportId) =>
+  request(`/api/v1/funds/${id}/reports/${reportId}`);
+export const createFundReport = (id, body) =>
+  request(`/api/v1/funds/${id}/reports`, { method: "POST", body });
+export const publishFundReport = (id, reportId) =>
+  request(`/api/v1/funds/${id}/reports/${reportId}/publish`, { method: "POST" });
+export const createFundDistributions = (id, body) =>
+  request(`/api/v1/funds/${id}/distributions`, { method: "POST", body });
+export const fetchFundDistributions = (id) => request(`/api/v1/funds/${id}/distributions`);

@@ -164,6 +164,120 @@ async function main() {
   console.log(`   Investments: ${investmentMap.length}`);
   console.log(`   Reports: 1 (published)`);
   console.log(`   Offerings: ${offeringData.length}`);
+
+  // 8. Fund — Italian Coastal Collection
+  const fund = await prisma.fund.upsert({
+    where: { id: "40000000-0000-0000-0000-000000000001" },
+    update: {},
+    create: {
+      id: "40000000-0000-0000-0000-000000000001",
+      orgId: org.id,
+      name: "Italian Coastal Collection Q1 2025",
+      description: "A diversified fund combining three premium Italian coastal and lakeside properties. This fund offers investors exposure to high-demand short-term rental markets across Campania, Lombardy, and Puglia with professional management and quarterly reporting.",
+      quarterYear: 2025,
+      quarterNumber: 1,
+      targetRaise: 500000,
+      minimumInvestment: 50000,
+      projectedReturn: 8.2,
+      imageUrls: [],
+      status: "open",
+    },
+  });
+
+  // Fund properties — Villa Serena, Casa del Sole, Trullo Bianco
+  const fundPropertyIds = [properties[0].id, properties[1].id, properties[3].id];
+  for (const propId of fundPropertyIds) {
+    await prisma.fundProperty.upsert({
+      where: { uq_fund_property: { fundId: fund.id, propertyId: propId } },
+      update: {},
+      create: { fundId: fund.id, propertyId: propId },
+    });
+  }
+
+  // Fund investments — Marco Bianchi and Sofia Rossi
+  const fundInvestmentData = [
+    { id: "50000000-0000-0000-0000-000000000001", investorIdx: 0, amount: 75000 },
+    { id: "50000000-0000-0000-0000-000000000002", investorIdx: 1, amount: 100000 },
+  ];
+  for (const fi of fundInvestmentData) {
+    await prisma.fundInvestment.upsert({
+      where: { uq_fund_investment: { fundId: fund.id, investorId: investors[fi.investorIdx].id } },
+      update: {},
+      create: {
+        id: fi.id,
+        fundId: fund.id,
+        investorId: investors[fi.investorIdx].id,
+        amount: fi.amount,
+        startDate: new Date("2025-01-15"),
+        status: "active",
+      },
+    });
+  }
+
+  // Fund report — Q1 2025 (published)
+  const fundReport = await prisma.fundReport.upsert({
+    where: { uq_fund_report_quarter: { fundId: fund.id, quarterYear: 2025, quarterNumber: 1 } },
+    update: {},
+    create: {
+      fundId: fund.id,
+      createdBy: admin.id,
+      quarterYear: 2025,
+      quarterNumber: 1,
+      status: "published",
+      publishedAt: new Date("2025-04-10"),
+      notes: "Strong Q1 performance across all three properties.",
+    },
+  });
+
+  // Fund offering
+  await prisma.offering.upsert({
+    where: { id: "30000000-0000-0000-0000-000000000004" },
+    update: {},
+    create: {
+      id: "30000000-0000-0000-0000-000000000004",
+      orgId: org.id,
+      fundId: fund.id,
+      propertyId: null,
+      title: "Italian Coastal Collection — Fund Investment",
+      description: "Invest in a diversified portfolio of three premium Italian properties. Quarterly distributions, professional management, and transparent reporting.",
+      minimumInvestment: 50000,
+      targetRaise: 500000,
+      projectedReturn: 8.2,
+      status: "open",
+    },
+  });
+
+  // Fund distributions — Q1 2025 for both investors
+  const totalFundInvested = 175000;
+  const netProfit = 12000; // sample net profit for Q1
+  for (const fi of fundInvestmentData) {
+    const equityShare = fi.amount / totalFundInvested;
+    const distAmount = Math.round(netProfit * equityShare);
+    await prisma.distribution.create({
+      data: {
+        fundInvestmentId: fi.id,
+        investmentId: null,
+        amount: distAmount,
+        distType: "quarterly",
+        periodStart: new Date("2025-01-01"),
+        periodEnd: new Date("2025-03-31"),
+        status: "paid",
+        paidAt: new Date("2025-04-15"),
+      },
+    });
+  }
+
+  console.log("✅ Seed complete!");
+  console.log(`   Organization: ${org.name}`);
+  console.log(`   Properties: ${properties.length}`);
+  console.log(`   Investors: ${investors.length}`);
+  console.log(`   Investments: ${investmentMap.length}`);
+  console.log(`   Reports: 1 (published)`);
+  console.log(`   Offerings: ${offeringData.length + 1} (incl. fund offering)`);
+  console.log(`   Fund: ${fund.name}`);
+  console.log(`   Fund Investments: ${fundInvestmentData.length}`);
+  console.log(`   Fund Report: 1 (published)`);
+  console.log(`   Fund Distributions: ${fundInvestmentData.length}`);
 }
 
 main()

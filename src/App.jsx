@@ -421,13 +421,14 @@ export default function SonnoHomesApp() {
 }
 
 function SonnoHomes() {
-  const { properties: PROPERTIES_API, investorData: INVESTOR_DATA_API, reports, offerings: OFFERINGS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, loading, error, addReport, refresh } = useData();
+  const { properties: PROPERTIES_API, investorData: INVESTOR_DATA_API, reports, offerings: OFFERINGS_API, funds: FUNDS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, loading, error, addReport, refresh } = useData();
   const [view, setView] = useState("admin"); // admin or investor
   const [page, setPage] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [selectedInvestor, setSelectedInvestor] = useState(null);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedOffering, setSelectedOffering] = useState(null);
+  const [selectedFund, setSelectedFund] = useState(null);
   const [fadeIn, setFadeIn] = useState(false);
   const investorLogin = INVESTOR_DATA_API.find(i => i.name === "Marco Bianchi") || INVESTOR_DATA_API[0] || INVESTOR_DATA[0]; // Demo investor: Marco Bianchi
 
@@ -558,19 +559,21 @@ function SonnoHomes() {
         {/* Content */}
         <div style={{ flex: 1, overflow: "auto", padding: 28, opacity: fadeIn ? 1 : 0, transform: fadeIn ? "translateY(0)" : "translateY(6px)", transition: "all 0.35s ease", minWidth: 0 }}>
           <div style={{ width: "100%", minWidth: 0 }}>
-            {(() => { const apiData = { investorData: INVESTOR_DATA_API, properties: PROPERTIES_API, offerings: OFFERINGS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, refresh }; const reps = reports.length > 0 ? reports : INITIAL_REPORTS; return (<>
-            {view === "admin" && page === "dashboard" && <AdminDashboard onViewInvestor={i => { setSelectedInvestor(i); setPage("investors"); }} apiData={apiData} />}
+            {(() => { const apiData = { investorData: INVESTOR_DATA_API, properties: PROPERTIES_API, offerings: OFFERINGS_API, funds: FUNDS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, refresh }; const reps = reports.length > 0 ? reports : INITIAL_REPORTS; return (<>
+            {view === "admin" && page === "dashboard" && <><AdminDashboard onViewInvestor={i => { setSelectedInvestor(i); setPage("investors"); }} apiData={apiData} /><FundDashboardSection isAdmin={true} apiData={apiData} /></>}
             {view === "admin" && page === "investors" && <AdminInvestors selected={selectedInvestor} onSelect={setSelectedInvestor} apiData={apiData} />}
             {view === "admin" && page === "properties" && <AdminProperties apiData={apiData} />}
-            {view === "admin" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={true} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} />}
+            {view === "admin" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={true} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} onViewFund={(f) => { setSelectedFund(f); setPage("fund-detail"); }} />}
             {view === "admin" && page === "offering-detail" && selectedOffering && <OfferingDetailView offering={selectedOffering} apiData={apiData} isAdmin={true} onBack={() => setPage("offerings")} refresh={refresh} />}
+            {view === "admin" && page === "fund-detail" && selectedFund && <FundDetailView fund={selectedFund} apiData={apiData} isAdmin={true} onBack={() => setPage("offerings")} refresh={refresh} />}
             {view === "admin" && page === "distributions" && <AdminDistributions apiData={apiData} />}
             {view === "admin" && page === "create-report" && <AdminCreateReport reports={reps} onAddReport={handleAddReport} apiData={apiData} />}
             {view === "admin" && page === "reports" && <AdminReports apiData={apiData} />}
             {view === "admin" && page === "settings" && <AdminSettings />}
-            {view === "investor" && page === "overview" && <InvestorOverview investor={investorLogin} onViewProperty={p => { setSelectedProperty(p); setPage("properties"); }} reports={reps} apiData={apiData} />}
-            {view === "investor" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={false} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} />}
+            {view === "investor" && page === "overview" && <><InvestorOverview investor={investorLogin} onViewProperty={p => { setSelectedProperty(p); setPage("properties"); }} reports={reps} apiData={apiData} /><FundDashboardSection isAdmin={false} apiData={apiData} /></>}
+            {view === "investor" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={false} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} onViewFund={(f) => { setSelectedFund(f); setPage("fund-detail"); }} />}
             {view === "investor" && page === "offering-detail" && selectedOffering && <OfferingDetailView offering={selectedOffering} apiData={apiData} isAdmin={false} onBack={() => setPage("offerings")} refresh={refresh} />}
+            {view === "investor" && page === "fund-detail" && selectedFund && <FundDetailView fund={selectedFund} apiData={apiData} isAdmin={false} onBack={() => setPage("offerings")} refresh={refresh} />}
             {view === "investor" && page === "distributions" && <InvestorDistributions investor={investorLogin} apiData={apiData} />}
             {view === "investor" && page === "properties" && <InvestorProperties investor={investorLogin} selectedProperty={selectedProperty} onSelectProperty={setSelectedProperty} reports={reps} apiData={apiData} />}
             {view === "investor" && page === "documents" && <InvestorDocuments investor={investorLogin} reports={reps} apiData={apiData} />}
@@ -1931,13 +1934,27 @@ function OfferingCard({ offering, onClick }) {
   );
 }
 
-function OfferingsListView({ apiData, isAdmin, onViewDetail }) {
+function OfferingsListView({ apiData, isAdmin, onViewDetail, onViewFund }) {
   const offerings = apiData?.offerings || [];
+  const funds = apiData?.funds || [];
   const properties = apiData?.properties || [];
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [filter, setFilter] = useState("all");
   const [form, setForm] = useState({ propertyId: "", title: "", description: "", minimumInvestment: "", targetRaise: "", projectedReturn: "" });
   const [error, setError] = useState("");
+
+  // Split offerings by product type
+  const propertyOfferings = offerings.filter(o => !o.fundId);
+  const fundOfferings = offerings.filter(o => o.fundId);
+  const hasFunds = fundOfferings.length > 0 || funds.length > 0;
+
+  // Apply filter
+  const filteredOfferings = filter === "fund" ? fundOfferings : filter === "property" ? propertyOfferings : offerings;
+
+  // Build fund lookup for fund offerings
+  const fundMap = {};
+  funds.forEach(f => { fundMap[f.id] = f; });
 
   const handleCreate = async () => {
     setError("");
@@ -1962,19 +1979,25 @@ function OfferingsListView({ apiData, isAdmin, onViewDetail }) {
   return (
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <div style={{ fontSize: 13, color: C.textMid }}>{offerings.length} offering{offerings.length !== 1 ? "s" : ""}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ fontSize: 13, color: C.textMid }}>{filteredOfferings.length} offering{filteredOfferings.length !== 1 ? "s" : ""}</div>
+          {hasFunds && <FundFilterToggle value={filter} onChange={setFilter} />}
         </div>
         {isAdmin && (
           <button onClick={() => setShowCreate(true)} style={{ padding: "9px 20px", borderRadius: 9, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>+ New Offering</button>
         )}
       </div>
 
-      {offerings.length === 0 ? (
+      {filteredOfferings.length === 0 ? (
         <Card><div style={{ textAlign: "center", padding: 40, color: C.textMid }}>No offerings available yet.</div></Card>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 18 }}>
-          {offerings.map(o => <OfferingCard key={o.id} offering={o} onClick={() => onViewDetail(o)} />)}
+          {filteredOfferings.map(o => {
+            if (o.fundId && fundMap[o.fundId]) {
+              return <FundCard key={o.id} fund={fundMap[o.fundId]} onClick={() => onViewFund?.(fundMap[o.fundId])} />;
+            }
+            return <OfferingCard key={o.id} offering={o} onClick={() => onViewDetail(o)} />;
+          })}
         </div>
       )}
 
@@ -2240,5 +2263,376 @@ function OfferingDetailView({ offering, apiData, isAdmin, onBack, refresh }) {
       {/* LOI Modal */}
       {showLOI && <LOIFormModal offering={offering} onClose={() => setShowLOI(false)} onSuccess={() => refresh?.()} />}
     </>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// FUND COMPONENTS
+// ═════════════════════════════════════════════════════════════════════════════
+
+function FundCard({ fund, onClick }) {
+  const isClosed = fund.status === "closed";
+  const propCount = fund.fundProperties?.filter(fp => !fp.removedAt)?.length || fund.propertyCount || 0;
+  return (
+    <Card hover onClick={onClick} style={{ cursor: "pointer", position: "relative", overflow: "hidden" }}>
+      {isClosed && (
+        <div style={{ position: "absolute", top: 14, right: -28, background: C.textMid, color: "#fff", fontSize: 10, fontWeight: 700, padding: "4px 36px", transform: "rotate(45deg)", zIndex: 2, letterSpacing: "0.05em" }}>CLOSED</div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${C.blue}25, ${C.blue}08)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🏦</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{fund.name}</div>
+            <Badge label="Fund" variant="blue" />
+          </div>
+          <div style={{ fontSize: 12, color: C.textMid }}>{propCount} propert{propCount !== 1 ? "ies" : "y"} · Q{fund.quarterNumber} {fund.quarterYear}</div>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Min. Investment</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>{fund.minimumInvestment ? euro(Number(fund.minimumInvestment)) : "—"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Target Raise</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>{fund.targetRaise ? euro(Number(fund.targetRaise)) : "—"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Projected Return</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.green }}>{fund.projectedReturn ? `${Number(fund.projectedReturn)}%` : "—"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</div>
+          <Badge label={fund.status} variant={fund.status === "open" ? "default" : fund.status === "closed" ? "muted" : "orange"} />
+        </div>
+      </div>
+      {fund.description && (
+        <div style={{ fontSize: 12, color: C.textMid, lineHeight: 1.5, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+          {fund.description.length > 120 ? fund.description.slice(0, 120) + "…" : fund.description}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FundFilterToggle({ value, onChange }) {
+  const options = [
+    { key: "all", label: "All" },
+    { key: "property", label: "Properties" },
+    { key: "fund", label: "Funds" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 4, background: C.warm, borderRadius: 9, padding: 3 }}>
+      {options.map(o => (
+        <button key={o.key} onClick={() => onChange(o.key)} style={{
+          padding: "6px 14px", borderRadius: 7, border: "none", fontSize: 12, fontWeight: 600,
+          background: value === o.key ? C.white : "transparent",
+          color: value === o.key ? C.dark : C.textMid,
+          cursor: "pointer", fontFamily: FONT, transition: "all 0.2s",
+          boxShadow: value === o.key ? "0 1px 4px rgba(0,0,0,0.08)" : "none",
+        }}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+function FundDetailView({ fund: initialFund, apiData, isAdmin, onBack, refresh }) {
+  const [fundDetail, setFundDetail] = useState(null);
+  const [investments, setInvestments] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [showLOI, setShowLOI] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fund = fundDetail || initialFund;
+  const fundProps = (fund.fundProperties || []).filter(fp => !fp.removedAt);
+  const offering = (apiData?.offerings || []).find(o => o.fundId === fund.id);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const [detail, invs, reps] = await Promise.all([
+          api.fetchFund(initialFund.id),
+          isAdmin ? api.fetchFundInvestments(initialFund.id).catch(() => []) : Promise.resolve([]),
+          api.fetchFundReports(initialFund.id).catch(() => []),
+        ]);
+        setFundDetail(detail);
+        setInvestments(Array.isArray(invs) ? invs : (invs?.data || []));
+        setReports(Array.isArray(reps) ? reps : (reps?.data || []));
+      } catch (e) { console.error("Failed to load fund detail:", e); }
+      finally { setLoading(false); }
+    })();
+  }, [initialFund.id, isAdmin]);
+
+  if (loading) return <Card><div style={{ textAlign: "center", padding: 40, color: C.textMid }}>Loading fund details…</div></Card>;
+
+  return (
+    <>
+      <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMid, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT, marginBottom: 18 }}>← Back to Offerings</button>
+
+      <Card style={{ marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: `linear-gradient(135deg, ${C.blue}25, ${C.blue}08)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🏦</div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{fund.name}</div>
+                <Badge label="Fund" variant="blue" />
+              </div>
+              <div style={{ fontSize: 13, color: C.textMid }}>Q{fund.quarterNumber} {fund.quarterYear} · {fundProps.length} propert{fundProps.length !== 1 ? "ies" : "y"}</div>
+            </div>
+          </div>
+          <Badge label={fund.status} variant={fund.status === "open" ? "default" : fund.status === "closed" ? "muted" : "orange"} />
+        </div>
+
+        {fund.description && (
+          <div style={{ fontSize: 13, color: C.text, lineHeight: 1.7, marginBottom: 20, padding: "14px 16px", background: C.warm, borderRadius: 10 }}>{fund.description}</div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
+          {[
+            { label: "Minimum Investment", value: fund.minimumInvestment ? euro(Number(fund.minimumInvestment)) : "—" },
+            { label: "Target Raise", value: fund.targetRaise ? euro(Number(fund.targetRaise)) : "—" },
+            { label: "Projected Return", value: fund.projectedReturn ? `${Number(fund.projectedReturn)}%` : "—" },
+            { label: "Properties", value: fundProps.length },
+            { label: "Status", value: fund.status },
+            { label: "Created", value: new Date(fund.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+          ].map(item => (
+            <div key={item.label}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{item.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: C.dark }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Constituent Properties */}
+      {fundProps.length > 0 && (
+        <Card style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 16 }}>Constituent Properties</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+            {fundProps.map(fp => {
+              const p = fp.property || {};
+              const typeIcons = { Villa: "🏡", Lakehouse: "☀️", Apartment: "🏛️", Trullo: "🏠", Farmhouse: "🍇", Loft: "✨", Masseria: "🏰", Penthouse: "🌇" };
+              return (
+                <div key={fp.id} style={{ padding: 14, background: C.warm, borderRadius: 10, display: "flex", alignItems: "center", gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>{typeIcons[p.propertyType] || "🏠"}</span>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>{p.name || "Property"}</div>
+                    <div style={{ fontSize: 11, color: C.textMid }}>{p.location || "—"} · {p.propertyType || "—"}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Invest Now for investors */}
+      {!isAdmin && fund.status === "open" && offering && (
+        <div style={{ marginBottom: 18 }}>
+          <button onClick={() => setShowLOI(true)} style={{ padding: "11px 28px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.accent}, ${C.accentSoft})`, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: `0 4px 14px ${C.accent}40` }}>Invest Now</button>
+        </div>
+      )}
+
+      {/* Admin: Fund Investments */}
+      {isAdmin && investments.length > 0 && (
+        <Card style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 16 }}>Fund Investments</div>
+          <SortableTable
+            columns={[
+              { key: "investor", label: "Investor", render: r => <span style={{ fontWeight: 600, color: C.dark }}>{r.investor?.firstName} {r.investor?.lastName}</span> },
+              { key: "amount", label: "Amount", render: r => <span style={{ fontWeight: 600 }}>{euro(Number(r.amount))}</span> },
+              { key: "equityShare", label: "Equity Share", render: r => <span style={{ fontWeight: 700, color: C.accent }}>{r.equityShare ? pct(Number(r.equityShare) * 100) : "—"}</span> },
+              { key: "startDate", label: "Start Date", render: r => new Date(r.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+              { key: "status", label: "Status", render: r => <Badge label={r.status} variant={r.status === "active" ? "green" : "muted"} /> },
+            ]}
+            data={investments}
+          />
+        </Card>
+      )}
+
+      {/* Admin: Fund Reports */}
+      {isAdmin && (
+        <Card style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>Fund Reports</div>
+          </div>
+          {reports.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 20, color: C.textMid, fontSize: 13 }}>No fund reports yet.</div>
+          ) : (
+            <SortableTable
+              columns={[
+                { key: "quarter", label: "Quarter", render: r => <span style={{ fontWeight: 600, color: C.dark }}>Q{r.quarterNumber} {r.quarterYear}</span> },
+                { key: "status", label: "Status", render: r => <Badge label={r.status} variant={r.status === "published" ? "green" : "orange"} /> },
+                { key: "publishedAt", label: "Published", render: r => r.publishedAt ? new Date(r.publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—" },
+              ]}
+              data={reports}
+              onRowClick={(r) => setSelectedReport(r)}
+            />
+          )}
+        </Card>
+      )}
+
+      {/* Fund Report Detail Modal */}
+      {selectedReport && <FundReportView report={selectedReport} fundId={fund.id} fund={fund} onClose={() => setSelectedReport(null)} />}
+
+      {/* LOI Modal */}
+      {showLOI && offering && <LOIFormModal offering={offering} onClose={() => setShowLOI(false)} onSuccess={() => refresh?.()} />}
+    </>
+  );
+}
+
+function FundReportView({ report, fundId, fund, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const d = await api.fetchFundReport(fundId, report.id);
+        setDetail(d);
+      } catch (e) { console.error("Failed to load fund report:", e); }
+      finally { setLoading(false); }
+    })();
+  }, [fundId, report.id]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
+      <div style={{ background: C.white, borderRadius: 16, padding: 28, width: 680, maxHeight: "85vh", overflow: "auto" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>Fund Report — Q{report.quarterNumber} {report.quarterYear}</div>
+            <div style={{ fontSize: 12, color: C.textMid, marginTop: 2 }}>{fund?.name || "Fund"}</div>
+          </div>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", cursor: "pointer", fontSize: 16, color: C.textMid }}>×</button>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: C.textMid }}>Loading report…</div>
+        ) : detail ? (
+          <>
+            {/* Aggregate Metrics */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+              {[
+                { label: "Total Revenue", value: euro(Number(detail.totalGrossRevenue || 0)), color: C.green },
+                { label: "Total Expenses", value: euro(Number(detail.totalExpenses || 0)), color: C.red },
+                { label: "Avg Occupancy", value: detail.averageOccupancy != null ? pct(Number(detail.averageOccupancy)) : "—", color: C.blue },
+                { label: "Nights Booked", value: detail.totalNightsBooked || 0, color: C.accent },
+                { label: "Nights Available", value: detail.totalNightsAvailable || 0, color: C.textMid },
+                { label: "Management Fee", value: euro(Number(detail.managementFee || 0)), color: C.accent },
+              ].map(m => (
+                <div key={m.label} style={{ padding: 14, background: C.warm, borderRadius: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>{m.label}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: m.color, fontFamily: DISPLAY }}>{m.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Net Returns */}
+            <div style={{ padding: 16, background: `linear-gradient(135deg, ${C.green}10, ${C.green}05)`, borderRadius: 12, marginBottom: 20, border: `1px solid ${C.green}20` }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Net Returns (After Fees)</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: C.green, fontFamily: DISPLAY }}>
+                {euro(Number(detail.totalGrossRevenue || 0) - Number(detail.totalExpenses || 0) - Number(detail.managementFee || 0))}
+              </div>
+            </div>
+
+            {/* Per-Property Breakdown */}
+            {detail.propertyBreakdown && detail.propertyBreakdown.length > 0 && (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 12 }}>Per-Property Breakdown</div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+                        {["Property", "Revenue", "Expenses", "Occupancy", "Nights"].map(h => (
+                          <th key={h} style={{ textAlign: "left", padding: "8px 10px", fontSize: 10, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.propertyBreakdown.map((pb, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={{ padding: "10px", fontWeight: 600, color: C.dark }}>{pb.propertyName || "Property"}</td>
+                          <td style={{ padding: "10px", fontWeight: 600, color: C.green }}>{euro(Number(pb.grossRevenue || 0))}</td>
+                          <td style={{ padding: "10px", color: C.red }}>{euro(Number(pb.totalExpenses || 0))}</td>
+                          <td style={{ padding: "10px" }}>{pb.occupancy != null ? pct(Number(pb.occupancy)) : "—"}</td>
+                          <td style={{ padding: "10px" }}>{pb.nightsBooked || 0}/{pb.nightsAvailable || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {/* Warnings */}
+            {detail.warnings && detail.warnings.length > 0 && (
+              <div style={{ marginTop: 16, padding: 12, background: C.redBg, borderRadius: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: C.red, marginBottom: 4 }}>Warnings</div>
+                {detail.warnings.map((w, i) => <div key={i} style={{ fontSize: 12, color: C.red }}>{w}</div>)}
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ textAlign: "center", padding: 40, color: C.textMid }}>Failed to load report details.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FundDashboardSection({ isAdmin, apiData }) {
+  const [metrics, setMetrics] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = isAdmin ? await api.fetchAdminDashboard() : await api.fetchInvestorDashboard();
+        setMetrics(data);
+      } catch (e) { console.error("Failed to load fund dashboard metrics:", e); }
+    })();
+  }, [isAdmin]);
+
+  if (!metrics) return null;
+
+  if (isAdmin) {
+    const fundAUM = Number(metrics.totalFundAUM || 0);
+    const activeFunds = Number(metrics.activeFundCount || 0);
+    const fundInvestors = Number(metrics.fundInvestorCount || 0);
+    if (fundAUM === 0 && activeFunds === 0 && fundInvestors === 0) return null;
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 16 }}>🏦</span>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>Fund Overview</div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+          <KPICard label="Fund AUM" value={euro(fundAUM)} icon="💼" />
+          <KPICard label="Active Funds" value={activeFunds.toString()} icon="🏦" />
+          <KPICard label="Fund Investors" value={fundInvestors.toString()} icon="👥" />
+        </div>
+      </div>
+    );
+  }
+
+  // Investor view
+  const fundInvested = Number(metrics.totalFundInvested || 0);
+  const fundDist = Number(metrics.totalFundDistributions || 0);
+  const fundROI = Number(metrics.fundROI || 0);
+  if (fundInvested === 0 && fundDist === 0) return null;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <span style={{ fontSize: 16 }}>🏦</span>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>Fund Investments</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+        <KPICard label="Fund Invested" value={euro(fundInvested)} icon="💼" />
+        <KPICard label="Fund Distributions" value={euro(fundDist)} icon="📤" />
+        <KPICard label="Fund ROI" value={pct(fundROI)} icon="📊" />
+      </div>
+    </div>
   );
 }

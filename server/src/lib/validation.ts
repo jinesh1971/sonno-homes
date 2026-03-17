@@ -190,3 +190,48 @@ export const updateLOISchema = z.object({
   status: z.enum(["submitted", "reviewed", "withdrawn"]),
 });
 
+
+// Funds
+export const createFundSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().min(1),
+  quarterYear: z.number().int().min(2020).max(2100),
+  quarterNumber: z.number().int().min(1).max(4),
+  targetRaise: z.number().min(0).optional(),
+  minimumInvestment: z.number().min(0).optional(),
+  projectedReturn: z.number().min(0).max(100).optional(),
+  imageUrls: z.array(z.string().url()).max(5).optional(),
+});
+
+export const updateFundSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  description: z.string().min(1).optional(),
+  quarterYear: z.number().int().min(2020).max(2100).optional(),
+  quarterNumber: z.number().int().min(1).max(4).optional(),
+  targetRaise: z.number().min(0).optional(),
+  minimumInvestment: z.number().min(0).optional(),
+  projectedReturn: z.number().min(0).max(100).optional(),
+  imageUrls: z.array(z.string().url()).max(5).optional(),
+  status: z.enum(["draft", "open", "closed"]).optional(),
+});
+
+export const addFundPropertiesSchema = z.object({
+  propertyIds: z.array(z.string().uuid()).min(1),
+});
+
+export const createFundInvestmentSchema = z.object({
+  investorId: z.string().uuid(),
+  amount: z.number().min(0),
+  startDate: z.string().date(),
+});
+
+export const createFundReportSchema = z.object({
+  quarterYear: z.number().int().min(2020).max(2100),
+  quarterNumber: z.number().int().min(1).max(4),
+});
+
+export const createFundDistributionSchema = z.object({
+  quarterYear: z.number().int().min(2020).max(2100),
+  quarterNumber: z.number().int().min(1).max(4),
+});
+

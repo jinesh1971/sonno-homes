@@ -11,12 +11,15 @@ router.get("/admin", requireRole("admin"), async (req: Request, res: Response, n
   try {
     const orgId = req.dbUser!.orgId;
 
-    const [properties, investments, investors, distributions, reports] = await Promise.all([
+    const [properties, investments, investors, distributions, reports, fundInvestments, activeFundCount, fundInvestorCount] = await Promise.all([
       prisma.property.findMany({ where: { orgId, deletedAt: null }, select: { id: true, propertyValue: true, status: true, contractYears: true, acquisitionDate: true } }),
       prisma.investment.findMany({ where: { property: { orgId }, deletedAt: null }, select: { amount: true, status: true } }),
       prisma.user.count({ where: { orgId, role: "investor", deletedAt: null } }),
       prisma.distribution.findMany({ where: { investment: { property: { orgId } } }, select: { amount: true, status: true } }),
       prisma.performanceReport.findMany({ where: { property: { orgId }, status: "published", deletedAt: null }, select: { grossRevenue: true, totalExpenses: true, managementFee: true } }),
+      prisma.fundInvestment.findMany({ where: { status: "active", fund: { orgId, deletedAt: null } }, select: { amount: true, investorId: true } }),
+      prisma.fund.count({ where: { orgId, status: "open", deletedAt: null } }),
+      prisma.fundInvestment.findMany({ where: { status: "active", fund: { orgId, deletedAt: null } }, select: { investorId: true }, distinct: ["investorId"] }),
     ]);
 
     const totalPortfolioValue = properties.reduce((s: number, p: any) => s + Number(p.propertyValue || 0), 0);
@@ -25,6 +28,8 @@ router.get("/admin", requireRole("admin"), async (req: Request, res: Response, n
     const totalRevenue = reports.reduce((s: number, r: any) => s + Number(r.grossRevenue), 0);
     const totalExpenses = reports.reduce((s: number, r: any) => s + Number(r.totalExpenses), 0);
     const totalMgmtFees = reports.reduce((s: number, r: any) => s + Number(r.managementFee), 0);
+
+    const totalFundAUM = fundInvestments.reduce((s: number, fi: any) => s + Number(fi.amount), 0);
 
     // Contract expiry: properties expiring within 6 months
     const now = new Date();
@@ -50,6 +55,11 @@ router.get("/admin", requireRole("admin"), async (req: Request, res: Response, n
         totalMgmtFees,
         netIncome: totalRevenue - totalExpenses - totalMgmtFees,
         expiringContracts,
+        fundMetrics: {
+          totalFundAUM,
+          activeFundCount,
+          fundInvestorCount: fundInvestorCount.length,
+        },
       },
     });
   } catch (err) { next(err); }
@@ -60,13 +70,22 @@ router.get("/investor", requireRole("investor"), async (req: Request, res: Respo
   try {
     const userId = req.dbUser!.id;
 
-    const investments = await prisma.investment.findMany({
-      where: { investorId: userId, deletedAt: null },
-      include: {
-        property: { select: { id: true, name: true, propertyValue: true, location: true, monthlyYield: true } },
-        distributions: { select: { amount: true, status: true } },
-      },
-    });
+    const [investments, investorFundInvestments] = await Promise.all([
+      prisma.investment.findMany({
+        where: { investorId: userId, deletedAt: null },
+        include: {
+          property: { select: { id: true, name: true, propertyValue: true, location: true, monthlyYield: true } },
+          distributions: { select: { amount: true, status: true } },
+        },
+      }),
+      prisma.fundInvestment.findMany({
+        where: { investorId: userId, status: "active" },
+        select: {
+          amount: true,
+          distributions: { select: { amount: true, status: true } },
+        },
+      }),
+    ]);
 
     const totalInvested = investments.reduce((s: number, i: any) => s + Number(i.amount), 0);
     const totalDistributed = investments.reduce((s: number, i: any) =>
@@ -101,6 +120,11 @@ router.get("/investor", requireRole("investor"), async (req: Request, res: Respo
       };
     });
 
+    const totalFundInvested = investorFundInvestments.reduce((s: number, fi: any) => s + Number(fi.amount), 0);
+    const totalFundDistributions = investorFundInvestments.reduce((s: number, fi: any) =>
+      s + fi.distributions.filter((d: any) => d.status === "paid").reduce((ds: number, d: any) => ds + Number(d.amount), 0), 0);
+    const fundROI = totalFundInvested > 0 ? Math.round((totalFundDistributions / totalFundInvested) * 10000) / 100 : 0;
+
     res.json({
       success: true,
       data: {
@@ -110,6 +134,11 @@ router.get("/investor", requireRole("investor"), async (req: Request, res: Respo
         propertyCount: investments.length,
         allocation,
         roiByProperty,
+        fundMetrics: {
+          totalFundInvested,
+          totalFundDistributions,
+          fundROI,
+        },
       },
     });
   } catch (err) { next(err); }

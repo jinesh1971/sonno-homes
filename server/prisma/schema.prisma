@@ -71,28 +71,28 @@ enum LOIStatus {
   withdrawn
 }
 
-
 // ── 1. ORGANIZATIONS ────────────────────────────────────────────────────────
 
 model Organization {
-  id              String   @id @default(uuid()) @db.Uuid
-  name            String   @db.VarChar(255)
-  registrationNo  String?  @map("registration_no") @db.VarChar(100)
-  email           String?  @db.VarChar(255)
-  phone           String?  @db.VarChar(50)
-  address         String?
-  country         String?  @db.VarChar(100)
-  logoUrl         String?  @map("logo_url")
-  managementFee   Decimal  @default(0.20) @map("management_fee") @db.Decimal(5, 4)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String    @db.VarChar(255)
+  registrationNo String?   @map("registration_no") @db.VarChar(100)
+  email          String?   @db.VarChar(255)
+  phone          String?   @db.VarChar(50)
+  address        String?
+  country        String?   @db.VarChar(100)
+  logoUrl        String?   @map("logo_url")
+  managementFee  Decimal   @default(0.20) @map("management_fee") @db.Decimal(5, 4)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz()
 
-  users           User[]
-  properties      Property[]
-  documents       Document[]
-  auditLogs       AuditLog[]
-  offerings       Offering[]
+  users      User[]
+  properties Property[]
+  documents  Document[]
+  auditLogs  AuditLog[]
+  offerings  Offering[]
+  funds      Fund[]
 
   @@map("organizations")
 }
@@ -100,29 +100,31 @@ model Organization {
 // ── 2. USERS (linked to Clerk for auth) ─────────────────────────────────────
 
 model User {
-  id              String    @id @default(uuid()) @db.Uuid
-  orgId           String    @map("org_id") @db.Uuid
-  clerkId         String    @unique @map("clerk_id") @db.VarChar(255)
-  email           String    @db.VarChar(255)
-  role            UserRole  @default(investor)
-  firstName       String    @map("first_name") @db.VarChar(100)
-  lastName        String    @map("last_name") @db.VarChar(100)
-  phone           String?   @db.VarChar(50)
-  avatarUrl       String?   @map("avatar_url")
-  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz()
-  isActive        Boolean   @default(true) @map("is_active")
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz()
+  id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
+  clerkId     String    @unique @map("clerk_id") @db.VarChar(255)
+  email       String    @db.VarChar(255)
+  role        UserRole  @default(investor)
+  firstName   String    @map("first_name") @db.VarChar(100)
+  lastName    String    @map("last_name") @db.VarChar(100)
+  phone       String?   @db.VarChar(50)
+  avatarUrl   String?   @map("avatar_url")
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz()
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz()
 
-  organization    Organization @relation(fields: [orgId], references: [id])
-  investorProfile InvestorProfile?
-  investments     Investment[]
-  createdReports  PerformanceReport[] @relation("ReportCreator")
-  uploadedDocs    Document[]   @relation("DocUploader")
-  docRecipients   DocumentRecipient[]
-  auditLogs       AuditLog[]
-  lettersOfIntent LetterOfIntent[]
+  organization       Organization        @relation(fields: [orgId], references: [id])
+  investorProfile    InvestorProfile?
+  investments        Investment[]
+  createdReports     PerformanceReport[] @relation("ReportCreator")
+  uploadedDocs       Document[]          @relation("DocUploader")
+  docRecipients      DocumentRecipient[]
+  auditLogs          AuditLog[]
+  lettersOfIntent    LetterOfIntent[]
+  fundInvestments    FundInvestment[]
+  createdFundReports FundReport[]        @relation("FundReportCreator")
 
   @@unique([orgId, email], name: "uq_users_email_org")
   @@index([orgId], name: "idx_users_org")
@@ -145,12 +147,11 @@ model InvestorProfile {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  user             User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId], name: "idx_investor_profiles_user")
   @@map("investor_profiles")
 }
-
 
 // ── 4. PROPERTIES ───────────────────────────────────────────────────────────
 
@@ -178,11 +179,12 @@ model Property {
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz()
 
-  organization    Organization   @relation(fields: [orgId], references: [id])
-  investments     Investment[]
-  reports         PerformanceReport[]
-  documents       Document[]     @relation("PropertyDocs")
-  offerings       Offering[]
+  organization   Organization        @relation(fields: [orgId], references: [id])
+  investments    Investment[]
+  reports        PerformanceReport[]
+  documents      Document[]          @relation("PropertyDocs")
+  offerings      Offering[]
+  fundProperties FundProperty[]
 
   @@index([orgId], name: "idx_properties_org")
   @@index([status], name: "idx_properties_status")
@@ -192,20 +194,20 @@ model Property {
 // ── 5. INVESTMENTS ──────────────────────────────────────────────────────────
 
 model Investment {
-  id            String           @id @default(uuid()) @db.Uuid
-  investorId    String           @map("investor_id") @db.Uuid
-  propertyId    String           @map("property_id") @db.Uuid
-  amount        Decimal          @db.Decimal(14, 2)
-  equityShare   Decimal?         @map("equity_share") @db.Decimal(7, 4)
-  startDate     DateTime         @map("start_date") @db.Date
-  endDate       DateTime?        @map("end_date") @db.Date
-  status        InvestmentStatus @default(active)
-  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
-  deletedAt     DateTime?        @map("deleted_at") @db.Timestamptz()
+  id          String           @id @default(uuid()) @db.Uuid
+  investorId  String           @map("investor_id") @db.Uuid
+  propertyId  String           @map("property_id") @db.Uuid
+  amount      Decimal          @db.Decimal(14, 2)
+  equityShare Decimal?         @map("equity_share") @db.Decimal(7, 4)
+  startDate   DateTime         @map("start_date") @db.Date
+  endDate     DateTime?        @map("end_date") @db.Date
+  status      InvestmentStatus @default(active)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz()
 
-  investor      User             @relation(fields: [investorId], references: [id])
-  property      Property         @relation(fields: [propertyId], references: [id])
+  investor      User           @relation(fields: [investorId], references: [id])
+  property      Property       @relation(fields: [propertyId], references: [id])
   distributions Distribution[]
 
   @@unique([investorId, propertyId], name: "uq_investment")
@@ -218,26 +220,28 @@ model Investment {
 // ── 6. DISTRIBUTIONS ────────────────────────────────────────────────────────
 
 model Distribution {
-  id            String             @id @default(uuid()) @db.Uuid
-  investmentId  String             @map("investment_id") @db.Uuid
-  periodStart   DateTime           @map("period_start") @db.Date
-  periodEnd     DateTime           @map("period_end") @db.Date
-  amount        Decimal            @db.Decimal(14, 2)
-  distType      DistributionType   @default(monthly) @map("dist_type")
-  status        DistributionStatus @default(pending)
-  paidAt        DateTime?          @map("paid_at") @db.Timestamptz()
-  notes         String?
-  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz()
+  id                String             @id @default(uuid()) @db.Uuid
+  investmentId      String?            @map("investment_id") @db.Uuid
+  fundInvestmentId  String?            @map("fund_investment_id") @db.Uuid
+  periodStart       DateTime           @map("period_start") @db.Date
+  periodEnd         DateTime           @map("period_end") @db.Date
+  amount            Decimal            @db.Decimal(14, 2)
+  distType          DistributionType   @default(monthly) @map("dist_type")
+  status            DistributionStatus @default(pending)
+  paidAt            DateTime?          @map("paid_at") @db.Timestamptz()
+  notes             String?
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime           @updatedAt @map("updated_at") @db.Timestamptz()
 
-  investment    Investment         @relation(fields: [investmentId], references: [id])
+  investment     Investment?     @relation(fields: [investmentId], references: [id])
+  fundInvestment FundInvestment? @relation(fields: [fundInvestmentId], references: [id])
 
   @@index([investmentId], name: "idx_distributions_investment")
+  @@index([fundInvestmentId], name: "idx_distributions_fund_investment")
   @@index([periodStart, periodEnd], name: "idx_distributions_period")
   @@index([status], name: "idx_distributions_status")
   @@map("distributions")
 }
-
 
 // ── 7. PERFORMANCE REPORTS ──────────────────────────────────────────────────
 
@@ -259,10 +263,10 @@ model PerformanceReport {
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt       DateTime?    @map("deleted_at") @db.Timestamptz()
 
-  property        Property     @relation(fields: [propertyId], references: [id])
-  creator         User         @relation("ReportCreator", fields: [createdBy], references: [id])
-  expenses        ReportExpense[]
-  documents       Document[]   @relation("ReportDocs")
+  property  Property        @relation(fields: [propertyId], references: [id])
+  creator   User            @relation("ReportCreator", fields: [createdBy], references: [id])
+  expenses  ReportExpense[]
+  documents Document[]      @relation("ReportDocs")
 
   @@unique([propertyId, periodStart, periodEnd], name: "uq_report_property_period")
   @@index([propertyId], name: "idx_reports_property")
@@ -282,7 +286,7 @@ model ReportExpense {
   sortOrder   Int      @default(0) @map("sort_order") @db.SmallInt
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  report      PerformanceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  report PerformanceReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
   @@index([reportId], name: "idx_report_expenses_report")
   @@map("report_expenses")
@@ -306,11 +310,11 @@ model Document {
   updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
   deletedAt     DateTime?    @map("deleted_at") @db.Timestamptz()
 
-  organization  Organization @relation(fields: [orgId], references: [id])
-  uploader      User?        @relation("DocUploader", fields: [uploadedBy], references: [id])
-  property      Property?    @relation("PropertyDocs", fields: [propertyId], references: [id])
-  report        PerformanceReport? @relation("ReportDocs", fields: [reportId], references: [id])
-  recipients    DocumentRecipient[]
+  organization Organization        @relation(fields: [orgId], references: [id])
+  uploader     User?               @relation("DocUploader", fields: [uploadedBy], references: [id])
+  property     Property?           @relation("PropertyDocs", fields: [propertyId], references: [id])
+  report       PerformanceReport?  @relation("ReportDocs", fields: [reportId], references: [id])
+  recipients   DocumentRecipient[]
 
   @@index([orgId], name: "idx_documents_org")
   @@index([propertyId], name: "idx_documents_property")
@@ -328,8 +332,8 @@ model DocumentRecipient {
   downloadedAt DateTime? @map("downloaded_at") @db.Timestamptz()
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
 
-  document     Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  investor     User      @relation(fields: [investorId], references: [id])
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  investor User     @relation(fields: [investorId], references: [id])
 
   @@unique([documentId, investorId], name: "uq_doc_recipient")
   @@index([investorId], name: "idx_doc_recipients_investor")
@@ -340,15 +344,15 @@ model DocumentRecipient {
 // ── 11. AUDIT LOG ───────────────────────────────────────────────────────────
 
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  orgId       String   @map("org_id") @db.Uuid
-  userId      String?  @map("user_id") @db.Uuid
-  action      String   @db.VarChar(100)
-  entityType  String?  @map("entity_type") @db.VarChar(100)
-  entityId    String?  @map("entity_id") @db.Uuid
-  metadata    Json?
-  ipAddress   String?  @map("ip_address") @db.VarChar(45)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  id         String   @id @default(uuid()) @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String?  @map("entity_type") @db.VarChar(100)
+  entityId   String?  @map("entity_id") @db.Uuid
+  metadata   Json?
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   organization Organization @relation(fields: [orgId], references: [id])
   user         User?        @relation(fields: [userId], references: [id])
@@ -361,13 +365,13 @@ model AuditLog {
   @@map("audit_log")
 }
 
-
 // ── 12. OFFERINGS ───────────────────────────────────────────────────────────
 
 model Offering {
   id                   String         @id @default(uuid()) @db.Uuid
   orgId                String         @map("org_id") @db.Uuid
-  propertyId           String         @map("property_id") @db.Uuid
+  propertyId           String?        @map("property_id") @db.Uuid
+  fundId               String?        @map("fund_id") @db.Uuid
   title                String         @db.VarChar(255)
   description          String
   minimumInvestment    Decimal        @map("minimum_investment") @db.Decimal(14, 2)
@@ -379,12 +383,14 @@ model Offering {
   createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz()
 
-  organization         Organization   @relation(fields: [orgId], references: [id])
-  property             Property       @relation(fields: [propertyId], references: [id])
-  lettersOfIntent      LetterOfIntent[]
+  organization    Organization     @relation(fields: [orgId], references: [id])
+  property        Property?        @relation(fields: [propertyId], references: [id])
+  fund            Fund?            @relation(fields: [fundId], references: [id])
+  lettersOfIntent LetterOfIntent[]
 
   @@index([orgId], name: "idx_offerings_org")
   @@index([propertyId], name: "idx_offerings_property")
+  @@index([fundId], name: "idx_offerings_fund")
   @@index([status], name: "idx_offerings_status")
   @@map("offerings")
 }
@@ -392,25 +398,128 @@ model Offering {
 // ── 13. LETTERS OF INTENT ───────────────────────────────────────────────────
 
 model LetterOfIntent {
-  id                     String    @id @default(uuid()) @db.Uuid
-  offeringId             String    @map("offering_id") @db.Uuid
-  investorId             String    @map("investor_id") @db.Uuid
-  fullName               String    @map("full_name") @db.VarChar(255)
-  email                  String    @db.VarChar(255)
-  phone                  String    @db.VarChar(50)
-  intendedAmount         Decimal   @map("intended_amount") @db.Decimal(14, 2)
-  signatureAcknowledged  Boolean   @default(false) @map("signature_acknowledged")
-  status                 LOIStatus @default(submitted)
-  reviewedAt             DateTime? @map("reviewed_at") @db.Timestamptz()
-  submittedAt            DateTime  @default(now()) @map("submitted_at") @db.Timestamptz()
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz()
-  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  id                    String    @id @default(uuid()) @db.Uuid
+  offeringId            String    @map("offering_id") @db.Uuid
+  investorId            String    @map("investor_id") @db.Uuid
+  fullName              String    @map("full_name") @db.VarChar(255)
+  email                 String    @db.VarChar(255)
+  phone                 String    @db.VarChar(50)
+  intendedAmount        Decimal   @map("intended_amount") @db.Decimal(14, 2)
+  signatureAcknowledged Boolean   @default(false) @map("signature_acknowledged")
+  status                LOIStatus @default(submitted)
+  reviewedAt            DateTime? @map("reviewed_at") @db.Timestamptz()
+  submittedAt           DateTime  @default(now()) @map("submitted_at") @db.Timestamptz()
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
-  offering               Offering  @relation(fields: [offeringId], references: [id])
-  investor               User      @relation(fields: [investorId], references: [id])
+  offering Offering @relation(fields: [offeringId], references: [id])
+  investor User     @relation(fields: [investorId], references: [id])
 
   @@index([offeringId], name: "idx_loi_offering")
   @@index([investorId], name: "idx_loi_investor")
   @@index([status], name: "idx_loi_status")
   @@map("letters_of_intent")
+}
+
+// ── 14. FUND STATUS ENUM ────────────────────────────────────────────────────
+
+enum FundStatus {
+  draft
+  open
+  closed
+}
+
+// ── 15. FUNDS ───────────────────────────────────────────────────────────────
+
+model Fund {
+  id                String     @id @default(uuid()) @db.Uuid
+  orgId             String     @map("org_id") @db.Uuid
+  name              String     @db.VarChar(255)
+  description       String
+  quarterYear       Int        @map("quarter_year") @db.SmallInt
+  quarterNumber     Int        @map("quarter_number") @db.SmallInt
+  targetRaise       Decimal?   @map("target_raise") @db.Decimal(14, 2)
+  minimumInvestment Decimal?   @map("minimum_investment") @db.Decimal(14, 2)
+  projectedReturn   Decimal?   @map("projected_return") @db.Decimal(5, 2)
+  imageUrls         String[]   @map("image_urls")
+  status            FundStatus @default(draft)
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt         DateTime?  @map("deleted_at") @db.Timestamptz()
+
+  organization    Organization     @relation(fields: [orgId], references: [id])
+  fundProperties  FundProperty[]
+  fundInvestments FundInvestment[]
+  fundReports     FundReport[]
+  offerings       Offering[]
+
+  @@index([orgId], name: "idx_funds_org")
+  @@index([status], name: "idx_funds_status")
+  @@map("funds")
+}
+
+// ── 16. FUND PROPERTIES (JOIN TABLE) ────────────────────────────────────────
+
+model FundProperty {
+  id         String    @id @default(uuid()) @db.Uuid
+  fundId     String    @map("fund_id") @db.Uuid
+  propertyId String    @map("property_id") @db.Uuid
+  addedAt    DateTime  @default(now()) @map("added_at") @db.Timestamptz()
+  removedAt  DateTime? @map("removed_at") @db.Timestamptz()
+
+  fund     Fund     @relation(fields: [fundId], references: [id])
+  property Property @relation(fields: [propertyId], references: [id])
+
+  @@unique([fundId, propertyId], name: "uq_fund_property")
+  @@index([fundId], name: "idx_fund_properties_fund")
+  @@index([propertyId], name: "idx_fund_properties_property")
+  @@map("fund_properties")
+}
+
+// ── 17. FUND INVESTMENTS ────────────────────────────────────────────────────
+
+model FundInvestment {
+  id         String           @id @default(uuid()) @db.Uuid
+  fundId     String           @map("fund_id") @db.Uuid
+  investorId String           @map("investor_id") @db.Uuid
+  amount     Decimal          @db.Decimal(14, 2)
+  startDate  DateTime         @map("start_date") @db.Date
+  status     InvestmentStatus @default(active)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime         @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt  DateTime?        @map("deleted_at") @db.Timestamptz()
+
+  fund     Fund @relation(fields: [fundId], references: [id])
+  investor User @relation(fields: [investorId], references: [id])
+  distributions Distribution[]
+
+  @@unique([fundId, investorId], name: "uq_fund_investment")
+  @@index([fundId], name: "idx_fund_investments_fund")
+  @@index([investorId], name: "idx_fund_investments_investor")
+  @@index([status], name: "idx_fund_investments_status")
+  @@map("fund_investments")
+}
+
+// ── 18. FUND REPORTS ────────────────────────────────────────────────────────
+
+model FundReport {
+  id            String       @id @default(uuid()) @db.Uuid
+  fundId        String       @map("fund_id") @db.Uuid
+  createdBy     String       @map("created_by") @db.Uuid
+  quarterYear   Int          @map("quarter_year") @db.SmallInt
+  quarterNumber Int          @map("quarter_number") @db.SmallInt
+  status        ReportStatus @default(draft)
+  publishedAt   DateTime?    @map("published_at") @db.Timestamptz()
+  notes         String?
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
+  deletedAt     DateTime?    @map("deleted_at") @db.Timestamptz()
+
+  fund    Fund @relation(fields: [fundId], references: [id])
+  creator User @relation("FundReportCreator", fields: [createdBy], references: [id])
+
+  @@unique([fundId, quarterYear, quarterNumber], name: "uq_fund_report_quarter")
+  @@index([fundId], name: "idx_fund_reports_fund")
+  @@index([quarterYear, quarterNumber], name: "idx_fund_reports_quarter")
+  @@map("fund_reports")
 }
