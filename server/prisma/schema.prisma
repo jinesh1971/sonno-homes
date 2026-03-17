@@ -12,6 +12,7 @@ datasource db {
 enum UserRole {
   admin
   investor
+  lead
 }
 
 enum PropertyStatus {
@@ -68,6 +69,9 @@ enum OfferingStatus {
 enum LOIStatus {
   submitted
   reviewed
+  approved
+  funded
+  rejected
   withdrawn
 }
 
@@ -405,9 +409,12 @@ model LetterOfIntent {
   email                 String    @db.VarChar(255)
   phone                 String    @db.VarChar(50)
   intendedAmount        Decimal   @map("intended_amount") @db.Decimal(14, 2)
+  occupation            String?   @db.VarChar(150)
+  city                  String?   @db.VarChar(150)
   signatureAcknowledged Boolean   @default(false) @map("signature_acknowledged")
   status                LOIStatus @default(submitted)
   reviewedAt            DateTime? @map("reviewed_at") @db.Timestamptz()
+  fundedAt              DateTime? @map("funded_at") @db.Timestamptz()
   submittedAt           DateTime  @default(now()) @map("submitted_at") @db.Timestamptz()
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz()

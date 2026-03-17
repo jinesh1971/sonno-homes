@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { DataProvider, useData } from "./DataContext.jsx";
+import { Show, SignInButton, SignUpButton, UserButton, useUser, useAuth } from "@clerk/react";
 import * as api from "./api.js";
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -412,25 +413,170 @@ function exportCSV(filename, headers, rows) {
 // ═════════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═════════════════════════════════════════════════════════════════════════════
-export default function SonnoHomesApp() {
+
+// Dev mode flag — when true, skip Clerk auth entirely
+const DEV_MODE = import.meta.env.DEV && !import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+function AuthLandingPage() {
+  const [fadeIn, setFadeIn] = useState(false);
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.href = "https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Playfair+Display:wght@400;500;600;700&display=swap";
+    link.rel = "stylesheet"; document.head.appendChild(link);
+    const style = document.createElement("style");
+    style.textContent = `*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; }`;
+    document.head.appendChild(style);
+    setTimeout(() => setFadeIn(true), 80);
+  }, []);
+
   return (
-    <DataProvider>
-      <SonnoHomes />
+    <div style={{ minHeight: "100vh", background: `linear-gradient(135deg, ${C.sidebar} 0%, #2A2420 50%, ${C.sidebar} 100%)`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, opacity: fadeIn ? 1 : 0, transition: "opacity 0.6s ease" }}>
+      <div style={{ textAlign: "center", maxWidth: 440, padding: 40 }}>
+        <div style={{ width: 72, height: 72, borderRadius: 18, background: `linear-gradient(135deg, ${C.accent}, ${C.accentSoft})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, fontWeight: 700, color: "#fff", margin: "0 auto 24px" }}>S</div>
+        <h1 style={{ fontSize: 32, fontWeight: 700, color: "#fff", fontFamily: DISPLAY, marginBottom: 8, letterSpacing: "-0.02em" }}>Sonno Homes</h1>
+        <p style={{ fontSize: 14, color: "#8A7E74", marginBottom: 36, lineHeight: 1.6 }}>Italian short-term rental investment platform.<br />Sign in to access your portfolio or explore offerings.</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+          <SignInButton mode="modal">
+            <button style={{ width: 260, padding: "13px 0", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.accent}, ${C.accentSoft})`, color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: `0 4px 20px ${C.accent}50`, transition: "transform 0.2s" }} onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"} onMouseLeave={e => e.currentTarget.style.transform = "none"}>Sign In</button>
+          </SignInButton>
+          <SignUpButton mode="modal">
+            <button style={{ width: 260, padding: "13px 0", borderRadius: 10, border: `1px solid #3A3230`, background: "transparent", color: "#D4A96A", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: FONT, transition: "all 0.2s" }} onMouseEnter={e => { e.currentTarget.style.background = "#2A2420"; }} onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>Create Account</button>
+          </SignUpButton>
+        </div>
+        <p style={{ fontSize: 11, color: "#6B5F55", marginTop: 28 }}>New investors can explore offerings after signing up.</p>
+      </div>
+    </div>
+  );
+}
+
+export default function SonnoHomesApp() {
+  // In dev mode without Clerk key, skip auth entirely
+  if (DEV_MODE) {
+    return (
+      <DataProvider userRole="admin">
+        <SonnoHomes userRole="admin" />
+      </DataProvider>
+    );
+  }
+
+  return (
+    <Show when="signed-in" fallback={<AuthLandingPage />}>
+      <AuthenticatedApp />
+    </Show>
+  );
+}
+
+function AuthenticatedApp() {
+  const { user, isLoaded } = useUser();
+  const { getToken } = useAuth();
+  const [userRole, setUserRole] = useState(null);
+  const [syncing, setSyncing] = useState(true);
+
+  // Sync Clerk user with our backend and determine role
+  useEffect(() => {
+    if (!isLoaded || !user) return;
+    let cancelled = false;
+    const syncRole = async () => {
+      try {
+        if (!cancelled && !userRole) setSyncing(true);
+        const token = await getToken();
+        const res = await fetch("/api/v1/auth/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            clerkId: user.id,
+            email: user.primaryEmailAddress?.emailAddress || "",
+            firstName: user.firstName || "",
+            lastName: user.lastName || "",
+            phone: user.primaryPhoneNumber?.phoneNumber || "",
+          }),
+        });
+        const data = await res.json();
+        if (!cancelled) {
+          console.log("Auth sync response:", data);
+          if (data.success) {
+            setUserRole(data.data.role || "lead");
+          } else {
+            console.warn("Auth sync failed:", data);
+            if (!userRole) setUserRole("lead");
+          }
+        }
+      } catch (e) {
+        console.error("Auth sync fetch failed:", e);
+        if (!cancelled && !userRole) setUserRole("lead");
+      } finally {
+        if (!cancelled) setSyncing(false);
+      }
+    };
+    syncRole();
+    // Re-check role every 30s to pick up promotions
+    const interval = setInterval(syncRole, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [isLoaded, user, getToken]);
+
+  if (!isLoaded || syncing) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg, fontFamily: FONT }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${C.accent}, ${C.accentSoft})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 700, color: "#fff", margin: "0 auto 16px" }}>S</div>
+          <div style={{ fontSize: 14, color: C.textMid }}>Loading your portal…</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <DataProvider userRole={userRole}>
+      <SonnoHomes userRole={userRole} clerkUser={user} />
     </DataProvider>
   );
 }
 
-function SonnoHomes() {
+function SonnoHomes({ userRole = "admin", clerkUser }) {
   const { properties: PROPERTIES_API, investorData: INVESTOR_DATA_API, reports, offerings: OFFERINGS_API, funds: FUNDS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, loading, error, addReport, refresh } = useData();
-  const [view, setView] = useState("admin"); // admin or investor
-  const [page, setPage] = useState("dashboard");
+
+  // Role-based view defaults
+  const isAdmin = userRole === "admin";
+  const isInvestor = userRole === "investor";
+  const isLead = userRole === "lead";
+
+  const defaultView = isAdmin ? "admin" : isInvestor ? "investor" : "lead";
+  const defaultPage = isAdmin ? "dashboard" : isInvestor ? "overview" : "offerings";
+
+  const [view, setView] = useState(defaultView);
+  const [page, setPage] = useState(defaultPage);
   const [collapsed, setCollapsed] = useState(false);
+
+  // React to role changes (e.g., lead promoted to investor)
+  useEffect(() => {
+    const newView = isAdmin ? "admin" : isInvestor ? "investor" : "lead";
+    const newPage = isAdmin ? "dashboard" : isInvestor ? "overview" : "offerings";
+    if (newView !== view) {
+      setView(newView);
+      setPage(newPage);
+    }
+  }, [userRole]);
   const [selectedInvestor, setSelectedInvestor] = useState(null);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [selectedOffering, setSelectedOffering] = useState(null);
   const [selectedFund, setSelectedFund] = useState(null);
   const [fadeIn, setFadeIn] = useState(false);
-  const investorLogin = INVESTOR_DATA_API.find(i => i.name === "Marco Bianchi") || INVESTOR_DATA_API[0] || INVESTOR_DATA[0]; // Demo investor: Marco Bianchi
+  const investorLogin = useMemo(() => {
+    // For admin view, use the investorData array (fetched from admin endpoints)
+    if (userRole === "admin") {
+      return INVESTOR_DATA_API.find(i => i.name === "Marco Bianchi") || INVESTOR_DATA_API[0] || INVESTOR_DATA[0];
+    }
+    // For investor view, use the "me" record built from investorDashboard
+    const meRecord = INVESTOR_DATA_API.find(i => i.id === "me") || INVESTOR_DATA_API[0];
+    if (meRecord) {
+      // Enrich with Clerk user info
+      const clerkName = clerkUser ? `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() : "";
+      const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress || "";
+      return { ...meRecord, name: clerkName || meRecord.name, email: clerkEmail || meRecord.email };
+    }
+    // Fallback to demo data
+    return INVESTOR_DATA[0];
+  }, [userRole, INVESTOR_DATA_API, clerkUser]);
 
   // Keep module-level references in sync for components that read them directly
   useEffect(() => { PERFORMANCE_REPORTS = reports.length > 0 ? reports : INITIAL_REPORTS; }, [reports]);
@@ -473,7 +619,14 @@ function SonnoHomes() {
     { id: "documents", label: "Documents", icon: "▤" },
     { id: "profile", label: "My Profile", icon: "◉" },
   ];
-  const nav = view === "admin" ? adminNav : investorNav;
+  const leadNav = [
+    { id: "offerings", label: "Offerings", icon: "📋" },
+    { id: "profile", label: "My Profile", icon: "◉" },
+  ];
+  const nav = view === "admin" ? adminNav : view === "investor" ? investorNav : leadNav;
+
+  // Can this user toggle between views?
+  const canToggleAdmin = isAdmin;
 
   return (
     <div style={{ display: "flex", height: "100vh", width: "100vw", fontFamily: FONT, background: C.bg, color: C.text, overflow: "hidden" }}>
@@ -494,8 +647,8 @@ function SonnoHomes() {
           )}
         </div>
 
-        {/* View Toggle */}
-        {!collapsed && (
+        {/* View Toggle — only for admins */}
+        {!collapsed && canToggleAdmin && (
           <div style={{ padding: "14px 16px 6px", display: "flex", gap: 4, background: "#141110" }}>
             {["admin", "investor"].map(v => (
               <button key={v} onClick={() => { setView(v); setPage(v === "admin" ? "dashboard" : "overview"); setSelectedInvestor(null); }}
@@ -544,13 +697,14 @@ function SonnoHomes() {
             {view === "admin" && <span style={{ fontSize: 11, fontWeight: 500, color: C.textLight, marginLeft: 10, fontFamily: FONT }}>Admin Panel</span>}
           </h1>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {!DEV_MODE && <UserButton afterSignOutUrl="/" />}
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: `linear-gradient(135deg, ${C.accent}40, ${C.accent}15)`, display: "flex", alignItems: "center", justifyContent: "center", color: C.accent, fontWeight: 700, fontSize: 12 }}>
                 {view === "admin" ? "SH" : investorLogin.name.split(" ").map(n => n[0]).join("")}
               </div>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>{view === "admin" ? "Sonno Admin" : investorLogin.name}</div>
-                <div style={{ fontSize: 10, color: C.textLight }}>{view === "admin" ? "Management" : "Investor Portal"}</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.dark }}>{view === "admin" ? "Sonno Admin" : isLead ? "New Investor" : investorLogin.name}</div>
+                <div style={{ fontSize: 10, color: C.textLight }}>{view === "admin" ? "Management" : isLead ? "Explore Offerings" : "Investor Portal"}</div>
               </div>
             </div>
           </div>
@@ -578,6 +732,10 @@ function SonnoHomes() {
             {view === "investor" && page === "properties" && <InvestorProperties investor={investorLogin} selectedProperty={selectedProperty} onSelectProperty={setSelectedProperty} reports={reps} apiData={apiData} />}
             {view === "investor" && page === "documents" && <InvestorDocuments investor={investorLogin} reports={reps} apiData={apiData} />}
             {view === "investor" && page === "profile" && <InvestorProfile investor={investorLogin} apiData={apiData} />}
+            {view === "lead" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={false} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} onViewFund={(f) => { setSelectedFund(f); setPage("fund-detail"); }} />}
+            {view === "lead" && page === "offering-detail" && selectedOffering && <OfferingDetailView offering={selectedOffering} apiData={apiData} isAdmin={false} onBack={() => setPage("offerings")} refresh={refresh} />}
+            {view === "lead" && page === "fund-detail" && selectedFund && <FundDetailView fund={selectedFund} apiData={apiData} isAdmin={false} onBack={() => setPage("offerings")} refresh={refresh} />}
+            {view === "lead" && page === "profile" && <LeadProfile />}
             </>); })()}
           </div>
         </div>
@@ -707,9 +865,34 @@ function AdminInvestors({ selected, onSelect, apiData }) {
   if (selected) {
     const inv = investors.find(i => i.id === selected.id) || selected;
     const recentDists = inv.distributions ? inv.distributions.slice(-12) : [];
+
+    const handleDelete = async () => {
+      if (!confirm(`Are you sure you want to permanently delete ${inv.name || inv.email}? This will remove ALL their data including investments, distributions, LOIs, and documents. This cannot be undone.`)) return;
+      try {
+        await api.deleteUser(inv.id);
+        apiData?.refresh?.();
+        onSelect(null);
+      } catch (e) { alert("Failed to delete: " + e.message); }
+    };
+
     return (
       <>
         <button onClick={() => onSelect(null)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", fontSize: 12, color: C.accent, fontWeight: 600, marginBottom: 18, fontFamily: FONT }}>← Back to All Investors</button>
+        
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>{inv.name || inv.email}</div>
+          <button onClick={handleDelete} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.red}30`, background: `${C.red}08`, color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Delete Investor</button>
+        </div>
+        
+        {inv._raw?.role === "lead" && (
+          <div style={{ marginBottom: 18, padding: 14, background: C.blueBg, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.blue }}>This user is a prospective lead</div>
+              <div style={{ fontSize: 11, color: C.textMid, marginTop: 2 }}>Promote them to investor to grant full dashboard access.</div>
+            </div>
+            <button onClick={async () => { try { await api.promoteUser(inv.id); apiData?.refresh?.(); } catch (e) { alert(e.message); } }} style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: C.blue, color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Promote to Investor</button>
+          </div>
+        )}
         
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
           <Card style={{ gridColumn: "1 / 2" }}>
@@ -1743,7 +1926,14 @@ function InvestorProperties({ investor, selectedProperty, onSelectProperty, repo
 
   return (
     <>
-      <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>{inv.propertyIds.length} properties linked to your investment · Click to view details</div>
+      <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>{inv.propertyIds.length} properties linked to your investment{inv.propertyIds.length > 0 ? " · Click to view details" : ""}</div>
+      {inv.propertyIds.length === 0 ? (
+        <Card><div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🏡</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 6 }}>No Properties Yet</div>
+          <div style={{ fontSize: 13, color: C.textMid, maxWidth: 360, margin: "0 auto" }}>Once your investment is funded through an offering, your properties will appear here with performance details and reports.</div>
+        </div></Card>
+      ) : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
         {inv.propertyIds.map(pid => {
           const p = props.find(pp => pp.id === pid);
@@ -1783,6 +1973,7 @@ function InvestorProperties({ investor, selectedProperty, onSelectProperty, repo
           ) : null;
         })}
       </div>
+      )}
     </>
   );
 }
@@ -2050,7 +2241,11 @@ function OfferingsListView({ apiData, isAdmin, onViewDetail, onViewFund }) {
 }
 
 function LOIFormModal({ offering, onClose, onSuccess }) {
-  const [form, setForm] = useState({ fullName: "", email: "", phone: "", intendedAmount: "", signatureAcknowledged: false });
+  const { user: clerkUser } = useUser();
+  const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+  const clerkName = clerkUser ? `${capitalize(clerkUser.firstName || "")} ${capitalize(clerkUser.lastName || "")}`.trim() : "";
+  const clerkEmail = clerkUser?.primaryEmailAddress?.emailAddress || "";
+  const [form, setForm] = useState({ fullName: clerkName, email: clerkEmail, phone: "", occupation: "", city: "", intendedAmount: "", signatureAcknowledged: false });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -2063,7 +2258,7 @@ function LOIFormModal({ offering, onClose, onSuccess }) {
     if (amount < Number(offering.minimumInvestment)) { setError(`Minimum investment is ${euro(Number(offering.minimumInvestment))}`); return; }
     try {
       setSubmitting(true);
-      await api.submitLOI(offering.id, { fullName: form.fullName, email: form.email, phone: form.phone || undefined, intendedAmount: amount, signatureAcknowledged: true });
+      await api.submitLOI(offering.id, { fullName: form.fullName, email: form.email, phone: form.phone || undefined, occupation: form.occupation || undefined, city: form.city || undefined, intendedAmount: amount, signatureAcknowledged: true });
       setSuccess(true);
       setTimeout(() => { onSuccess?.(); onClose(); }, 2000);
     } catch (e) { setError(e.message); } finally { setSubmitting(false); }
@@ -2087,15 +2282,25 @@ function LOIFormModal({ offering, onClose, onSuccess }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Full Name *</label>
-                <input value={form.fullName} onChange={e => setForm(f => ({ ...f, fullName: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+                <input value={form.fullName} readOnly style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box", background: C.warm, color: C.textMid }} />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Email *</label>
-                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+                <input type="email" value={form.email} readOnly style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box", background: C.warm, color: C.textMid }} />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Phone</label>
                 <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Occupation</label>
+                  <input value={form.occupation} onChange={e => setForm(f => ({ ...f, occupation: e.target.value }))} placeholder="e.g. Architect" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>City</label>
+                  <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="e.g. New York" style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, boxSizing: "border-box" }} />
+                </div>
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, display: "block" }}>Intended Investment ($) *</label>
@@ -2125,16 +2330,33 @@ function AdminLOITable({ offeringId }) {
     api.fetchOfferingLOIs(offeringId).then(setLois).catch(() => setLois([])).finally(() => setLoading(false));
   }, [offeringId]);
 
-  const markReviewed = async (loiId) => {
+  const updateStatus = async (loiId, newStatus) => {
     try {
-      await api.updateLOIStatus(offeringId, loiId, { status: "reviewed" });
-      setLois(prev => prev.map(l => l.id === loiId ? { ...l, status: "reviewed", reviewedAt: new Date().toISOString() } : l));
-    } catch (e) { console.error("Failed to update LOI:", e); }
+      await api.updateLOIStatus(offeringId, loiId, { status: newStatus });
+      setLois(prev => prev.map(l => l.id === loiId ? { ...l, status: newStatus, ...(newStatus === "reviewed" ? { reviewedAt: new Date().toISOString() } : {}), ...(newStatus === "funded" ? { fundedAt: new Date().toISOString() } : {}) } : l));
+    } catch (e) { console.error("Failed to update LOI:", e); alert(e.message || "Failed to update status"); }
   };
 
   const totalAmount = lois.reduce((s, l) => s + Number(l.intendedAmount), 0);
 
   if (loading) return <div style={{ padding: 20, color: C.textMid, fontSize: 13 }}>Loading LOIs…</div>;
+
+  const statusVariant = (s) => ({ submitted: "default", reviewed: "blue", approved: "orange", funded: "green", rejected: "red", withdrawn: "default" }[s] || "default");
+
+  // Next action buttons per status
+  const renderActions = (l) => {
+    const btn = (label, status, color = C.accent) => (
+      <button onClick={() => updateStatus(l.id, status)} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${color}30`, background: `${color}10`, color, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT, marginRight: 4 }}>{label}</button>
+    );
+    const rejectBtn = btn("Reject", "rejected", C.red);
+
+    switch (l.status) {
+      case "submitted": return <>{btn("Review", "reviewed")}{rejectBtn}</>;
+      case "reviewed": return <>{btn("Approve", "approved")}{rejectBtn}</>;
+      case "approved": return <>{btn("Mark Funded", "funded", C.green)}{rejectBtn}</>;
+      default: return null;
+    }
+  };
 
   return (
     <div>
@@ -2156,7 +2378,7 @@ function AdminLOITable({ offeringId }) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: `2px solid ${C.border}` }}>
-                {["Investor", "Email", "Phone", "Amount", "Date", "Status", ""].map(h => (
+                {["Investor", "Email", "Phone", "Amount", "Date", "Status", "Actions"].map(h => (
                   <th key={h} style={{ textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>
                 ))}
               </tr>
@@ -2169,12 +2391,8 @@ function AdminLOITable({ offeringId }) {
                   <td style={{ padding: "10px", color: C.textMid }}>{l.phone || "—"}</td>
                   <td style={{ padding: "10px", fontWeight: 600 }}>{euro(Number(l.intendedAmount))}</td>
                   <td style={{ padding: "10px", color: C.textMid }}>{new Date(l.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
-                  <td style={{ padding: "10px" }}><Badge label={l.status} variant={l.status === "reviewed" ? "green" : "default"} /></td>
-                  <td style={{ padding: "10px" }}>
-                    {l.status === "submitted" && (
-                      <button onClick={() => markReviewed(l.id)} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.accent, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: FONT }}>Mark Reviewed</button>
-                    )}
-                  </td>
+                  <td style={{ padding: "10px" }}><Badge label={l.status} variant={statusVariant(l.status)} /></td>
+                  <td style={{ padding: "10px", whiteSpace: "nowrap" }}>{renderActions(l)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2436,13 +2654,21 @@ function FundDetailView({ fund: initialFund, apiData, isAdmin, onBack, refresh }
         </div>
       )}
 
+      {/* Admin: LOIs for this fund offering */}
+      {isAdmin && offering && (
+        <Card style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 16 }}>Letters of Intent</div>
+          <AdminLOITable offeringId={offering.id} />
+        </Card>
+      )}
+
       {/* Admin: Fund Investments */}
       {isAdmin && investments.length > 0 && (
         <Card style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 16 }}>Fund Investments</div>
           <SortableTable
             columns={[
-              { key: "investor", label: "Investor", render: r => <span style={{ fontWeight: 600, color: C.dark }}>{r.investor?.firstName} {r.investor?.lastName}</span> },
+              { key: "investor", label: "Investor", render: r => { const fn = r.investor?.firstName || ""; const ln = r.investor?.lastName || ""; return <span style={{ fontWeight: 600, color: C.dark }}>{fn.charAt(0).toUpperCase() + fn.slice(1)} {ln.charAt(0).toUpperCase() + ln.slice(1)}</span>; } },
               { key: "amount", label: "Amount", render: r => <span style={{ fontWeight: 600 }}>{euro(Number(r.amount))}</span> },
               { key: "equityShare", label: "Equity Share", render: r => <span style={{ fontWeight: 700, color: C.accent }}>{r.equityShare ? pct(Number(r.equityShare) * 100) : "—"}</span> },
               { key: "startDate", label: "Start Date", render: r => new Date(r.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
@@ -2634,5 +2860,23 @@ function FundDashboardSection({ isAdmin, apiData }) {
         <KPICard label="Fund ROI" value={pct(fundROI)} icon="📊" />
       </div>
     </div>
+  );
+}
+
+function LeadProfile() {
+  return (
+    <Card>
+      <div style={{ textAlign: "center", padding: 40 }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🏠</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 8 }}>Welcome to Sonno Homes</div>
+        <div style={{ fontSize: 13, color: C.textMid, lineHeight: 1.7, maxWidth: 400, margin: "0 auto", marginBottom: 24 }}>
+          You currently have access to browse our investment offerings. Once you submit a Letter of Intent and your investment is funded, you will gain full access to your investor dashboard with portfolio tracking, distributions, and reports.
+        </div>
+        <div style={{ padding: 16, background: C.warm, borderRadius: 12, display: "inline-block" }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Your Status</div>
+          <Badge label="Prospective Investor" variant="orange" />
+        </div>
+      </div>
+    </Card>
   );
 }

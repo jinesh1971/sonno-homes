@@ -183,11 +183,13 @@ export const createLOISchema = z.object({
   email: z.string().email(),
   phone: z.string().min(1).max(50),
   intendedAmount: z.number().min(0),
+  occupation: z.string().max(150).optional(),
+  city: z.string().max(150).optional(),
   signatureAcknowledged: z.literal(true),
 });
 
 export const updateLOISchema = z.object({
-  status: z.enum(["submitted", "reviewed", "withdrawn"]),
+  status: z.enum(["submitted", "reviewed", "approved", "funded", "rejected", "withdrawn"]),
 });
 
 

@@ -17,6 +17,7 @@ import exportRoutes from "./routes/exports.js";
 import auditRoutes from "./routes/audit.js";
 import offeringRoutes from "./routes/offerings.js";
 import fundRoutes from "./routes/funds.js";
+import authSyncRoutes from "./routes/authSync.js";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -37,6 +38,9 @@ app.use(express.json());
 app.get("/api/health", (_req, res) => {
   res.json({ success: true, data: { status: "ok", timestamp: new Date().toISOString() } });
 });
+
+// Auth sync route (public — called during Clerk sign-in flow)
+app.use("/api/v1/auth/sync", authSyncRoutes);
 
 // Clerk auth (attaches auth info to all protected requests)
 if (process.env.NODE_ENV !== "test") {

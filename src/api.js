@@ -4,12 +4,26 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+// Token getter — set by DataContext once Clerk is available
+let _getToken = null;
+export function setTokenGetter(fn) { _getToken = fn; }
+
 async function request(path, options = {}) {
   const { method = "GET", body, role = "admin" } = options;
   const headers = { "Content-Type": "application/json" };
 
-  // Dev mode: pass role header for auth bypass
-  if (import.meta.env.DEV) {
+  // Attach Clerk Bearer token if available
+  if (_getToken) {
+    try {
+      const token = await _getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    } catch (e) {
+      console.warn("Failed to get auth token:", e);
+    }
+  }
+
+  // Dev mode fallback: pass role header for auth bypass
+  if (import.meta.env.DEV && !headers["Authorization"]) {
     headers["X-Dev-Role"] = role;
   }
 
@@ -36,6 +50,8 @@ export const fetchInvestments = (params = "") => request(`/api/v1/investments${p
 // ── Users ───────────────────────────────────────────────────────────────────
 export const fetchUsers = () => request("/api/v1/users");
 export const createUser = (body) => request("/api/v1/users", { method: "POST", body });
+export const promoteUser = (id) => request(`/api/v1/users/${id}/promote`, { method: "POST" });
+export const deleteUser = (id) => request(`/api/v1/users/${id}`, { method: "DELETE" });
 
 // ── Distributions ───────────────────────────────────────────────────────────
 export const fetchDistributions = () => request("/api/v1/distributions");
@@ -55,8 +71,19 @@ export const fetchInvestorDashboard = () => request("/api/v1/dashboard/investor"
 export const fetchDocuments = (role = "admin") => request("/api/v1/documents", { role });
 
 // ── Exports ─────────────────────────────────────────────────────────────────
-export const exportInvestorsCSV = () =>
-  fetch(`${API_BASE}/api/v1/exports/investors`, { headers: { "X-Dev-Role": "admin" } }).then(r => r.text());
+export const exportInvestorsCSV = async () => {
+  const headers = {};
+  if (_getToken) {
+    try {
+      const token = await _getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    } catch (e) { /* fallback */ }
+  }
+  if (!headers["Authorization"] && import.meta.env.DEV) {
+    headers["X-Dev-Role"] = "admin";
+  }
+  return fetch(`${API_BASE}/api/v1/exports/investors`, { headers }).then(r => r.text());
+};
 
 // ── Offerings ───────────────────────────────────────────────────────────────
 export const fetchOfferings = (role = "admin") => request("/api/v1/offerings", { role });

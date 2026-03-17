@@ -90,8 +90,38 @@ router.patch("/:id", requireRole("admin"), async (req: Request, res: Response, n
   } catch (err) { next(err); }
 });
 
-// DELETE /users/:id (admin only, soft delete)
+// DELETE /users/:id (admin only, hard delete — removes all related data)
 router.delete("/:id", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = uuidParam.parse(req.params.id);
+    const existing = await prisma.user.findFirst({
+      where: { id, orgId: req.dbUser!.orgId },
+    });
+    if (!existing) throw new NotFoundError("User", id);
+
+    // Prevent deleting yourself
+    if (id === req.dbUser!.id) {
+      throw new ForbiddenError("Cannot delete your own account");
+    }
+
+    // Delete all related data in order (respecting FK constraints)
+    await prisma.documentRecipient.deleteMany({ where: { investorId: id } });
+    await prisma.distribution.deleteMany({ where: { investment: { investorId: id } } });
+    await prisma.distribution.deleteMany({ where: { fundInvestment: { investorId: id } } });
+    await prisma.investment.deleteMany({ where: { investorId: id } });
+    await prisma.fundInvestment.deleteMany({ where: { investorId: id } });
+    await prisma.letterOfIntent.deleteMany({ where: { investorId: id } });
+    await prisma.investorProfile.deleteMany({ where: { userId: id } });
+    await prisma.auditLog.deleteMany({ where: { userId: id } });
+    await prisma.document.deleteMany({ where: { uploadedBy: id } });
+    await prisma.user.delete({ where: { id } });
+
+    res.json({ success: true, data: { message: "Investor and all related data permanently deleted" } });
+  } catch (err) { next(err); }
+});
+
+// POST /users/:id/promote (admin only — promote lead to investor)
+router.post("/:id/promote", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = uuidParam.parse(req.params.id);
     const existing = await prisma.user.findFirst({
@@ -99,8 +129,20 @@ router.delete("/:id", requireRole("admin"), async (req: Request, res: Response, 
     });
     if (!existing) throw new NotFoundError("User", id);
 
-    await prisma.user.update({ where: { id }, data: { deletedAt: new Date() } });
-    res.json({ success: true, data: { message: "User deleted" } });
+    const user = await prisma.user.update({
+      where: { id },
+      data: { role: "investor" },
+      include: { investorProfile: true },
+    });
+
+    // Create investor profile if it doesn't exist
+    if (!user.investorProfile) {
+      await prisma.investorProfile.create({
+        data: { userId: user.id },
+      });
+    }
+
+    res.json({ success: true, data: user });
   } catch (err) { next(err); }
 });
 

@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { useAuth } from "@clerk/react";
 import * as api from "./api.js";
+import { setTokenGetter } from "./api.js";
 
 const DataContext = createContext(null);
 
@@ -16,7 +18,7 @@ const typeIcons = {
 const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 // Generate synthetic distributions for demo (until real distributions are seeded)
-function generateDistributions(investment, startDate, monthsActive) {
+export function generateDistributions(investment, startDate, monthsActive) {
   const dists = [];
   const baseMonthly = investment * 0.018;
   const start = new Date(startDate);
@@ -78,7 +80,7 @@ function transformInvestor(user, investments, profile) {
 
   return {
     id: user.id,
-    name: `${user.firstName} ${user.lastName}`,
+    name: `${(user.firstName || "").charAt(0).toUpperCase() + (user.firstName || "").slice(1)} ${(user.lastName || "").charAt(0).toUpperCase() + (user.lastName || "").slice(1)}`.trim(),
     email: user.email,
     phone: user.phone || "",
     occupation: profile?.occupation || "",
@@ -128,56 +130,114 @@ function transformReport(r) {
     netProfit,
     occupancy,
     status: r.status === "published" ? "Published" : r.status === "draft" ? "Draft" : r.status,
-    createdBy: r.creator ? `${r.creator.firstName} ${r.creator.lastName}` : "Sonno Admin",
+    createdBy: r.creator ? `${(r.creator.firstName || "").charAt(0).toUpperCase() + (r.creator.firstName || "").slice(1)} ${(r.creator.lastName || "").charAt(0).toUpperCase() + (r.creator.lastName || "").slice(1)}`.trim() : "Sonno Admin",
     createdAt: r.createdAt?.slice?.(0, 10) || new Date(r.createdAt).toISOString().slice(0, 10),
     property: r.property,
   };
 }
 
-export function DataProvider({ children }) {
+export function DataProvider({ children, userRole }) {
+  // Wire Clerk token into the API client (synchronously, before any effects)
+  const { getToken } = useAuth();
+  setTokenGetter(() => getToken());
+
   const [properties, setProperties] = useState([]);
   const [investorData, setInvestorData] = useState([]);
   const [reports, setReports] = useState([]);
   const [offerings, setOfferings] = useState([]);
   const [funds, setFunds] = useState([]);
+  const [investorDashboard, setInvestorDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const isAdmin = userRole === "admin";
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [propRes, userRes, invRes, reportRes, offeringsRes, fundsRes] = await Promise.all([
-        api.fetchProperties(),
-        api.fetchUsers(),
-        api.fetchInvestments(),
-        api.fetchReports(),
-        api.fetchOfferings().catch(() => []),
-        api.fetchFunds().catch(() => []),
-      ]);
+      // All roles can fetch offerings; only admin fetches users/investments/reports
+      const offeringsPromise = api.fetchOfferings().catch(() => []);
+      const fundsPromise = api.fetchFunds().catch(() => []);
+      const propsPromise = api.fetchProperties().catch(() => ({ properties: [] }));
 
-      // Transform properties
-      const props = (propRes.properties || []).map(transformProperty);
-      setProperties(props);
+      if (isAdmin) {
+        const [propRes, userRes, invRes, reportRes, offeringsRes, fundsRes] = await Promise.all([
+          propsPromise,
+          api.fetchUsers().catch(() => ({ users: [] })),
+          api.fetchInvestments().catch(() => ({ investments: [] })),
+          api.fetchReports().catch(() => ({ reports: [] })),
+          offeringsPromise,
+          fundsPromise,
+        ]);
 
-      // Transform investors (users with role=investor + their investments + profiles)
-      const investors = (userRes.users || []).filter(u => u.role === "investor");
-      const allInvestments = invRes.investments || [];
-      const investorList = investors.map(u =>
-        transformInvestor(u, allInvestments, u.investorProfile)
-      );
-      setInvestorData(investorList);
+        const props = (propRes.properties || []).map(transformProperty);
+        setProperties(props);
 
-      // Transform reports
-      const reps = (reportRes.reports || []).map(transformReport);
-      setReports(reps);
+        const investors = (userRes.users || []).filter(u => u.role === "investor");
+        const allInvestments = invRes.investments || [];
+        const investorList = investors.map(u =>
+          transformInvestor(u, allInvestments, u.investorProfile)
+        );
+        setInvestorData(investorList);
 
-      // Set offerings
-      setOfferings(Array.isArray(offeringsRes) ? offeringsRes : (offeringsRes || []));
+        const reps = (reportRes.reports || []).map(transformReport);
+        setReports(reps);
 
-      // Set funds
-      setFunds(Array.isArray(fundsRes) ? fundsRes : (fundsRes?.data || fundsRes || []));
+        setOfferings(Array.isArray(offeringsRes) ? offeringsRes : (offeringsRes || []));
+        setFunds(Array.isArray(fundsRes) ? fundsRes : (fundsRes?.data || fundsRes || []));
+      } else {
+        // Investor or lead — only fetch what they can access
+        const isInvestor = userRole === "investor";
+        const [propRes, offeringsRes, fundsRes, dashRes] = await Promise.all([
+          propsPromise,
+          offeringsPromise,
+          fundsPromise,
+          isInvestor ? api.fetchInvestorDashboard().catch(() => null) : Promise.resolve(null),
+        ]);
+
+        const props = (propRes.properties || []).map(transformProperty);
+        setProperties(props);
+        setOfferings(Array.isArray(offeringsRes) ? offeringsRes : (offeringsRes || []));
+        setFunds(Array.isArray(fundsRes) ? fundsRes : (fundsRes?.data || fundsRes || []));
+
+        // Build investorData from dashboard response for the logged-in investor
+        if (dashRes) {
+          setInvestorDashboard(dashRes);
+          const alloc = dashRes.allocation || [];
+          const totalInv = Number(dashRes.totalInvested || 0);
+          const totalDist = Number(dashRes.totalDistributed || 0);
+          const propertyIds = alloc.map(a => a.propertyId);
+          const investmentMap = {};
+          alloc.forEach(a => { investmentMap[a.propertyId] = Number(a.invested); });
+          const roiPct = totalInv > 0 ? (totalDist / totalInv) * 100 : 0;
+          // Use real data — no fake distributions
+          const distributions = []; // Will be populated when admin creates actual distributions
+          const contractEnd = new Date();
+          contractEnd.setFullYear(contractEnd.getFullYear() + 5);
+          setInvestorData([{
+            id: "me",
+            name: "Investor",
+            email: "",
+            phone: "",
+            occupation: "",
+            city: "",
+            invested: totalInv,
+            propertyIds,
+            investments: investmentMap,
+            startDate: new Date().toISOString(),
+            monthsActive: 0,
+            futureCommitment: false,
+            notes: "",
+            distributions,
+            totalDistributed: totalDist,
+            roiPct,
+            contractEnd,
+            monthsRemaining: 60,
+          }]);
+        }
+      }
 
     } catch (err) {
       console.error("Failed to load data from API:", err);
@@ -185,7 +245,7 @@ export function DataProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -263,6 +323,7 @@ export function DataProvider({ children }) {
     reports,
     offerings,
     funds,
+    investorDashboard,
     totalInvested,
     totalDistributed,
     avgROI,

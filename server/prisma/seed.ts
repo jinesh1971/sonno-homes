@@ -18,7 +18,7 @@ async function main() {
     },
   });
 
-  // 2. Admin user
+  // 2. Admin users
   const admin = await prisma.user.upsert({
     where: { clerkId: "clerk_admin_001" },
     update: {},
@@ -29,6 +29,20 @@ async function main() {
       email: "eric@sonnohomes.com",
       role: "admin",
       firstName: "Eric",
+      lastName: "Admin",
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { clerkId: "clerk_admin_002" },
+    update: {},
+    create: {
+      id: "a0000000-0000-0000-0000-000000000002",
+      orgId: org.id,
+      clerkId: "clerk_admin_002",
+      email: "jineshrocks1999@gmail.com",
+      role: "admin",
+      firstName: "Jinesh",
       lastName: "Admin",
     },
   });

@@ -40,7 +40,7 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const where: any = { orgId: req.dbUser!.orgId };
 
-    if (req.dbUser!.role === "investor") {
+    if (req.dbUser!.role === "investor" || req.dbUser!.role === "lead") {
       where.status = "open";
     }
 
@@ -80,8 +80,8 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
     });
     if (!offering) throw new NotFoundError("Offering", id);
 
-    // Investors can only see open offerings
-    if (req.dbUser!.role === "investor" && offering.status !== "open") {
+    // Investors and leads can only see open offerings
+    if ((req.dbUser!.role === "investor" || req.dbUser!.role === "lead") && offering.status !== "open") {
       throw new NotFoundError("Offering", id);
     }
 
@@ -123,8 +123,8 @@ router.patch("/:id", requireRole("admin"), async (req: Request, res: Response, n
   }
 });
 
-// POST /offerings/:id/lois — investor submits LOI
-router.post("/:id/lois", requireRole("investor"), async (req: Request, res: Response, next: NextFunction) => {
+// POST /offerings/:id/lois — investor or lead submits LOI
+router.post("/:id/lois", requireRole("investor", "lead"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const offeringId = uuidParam.parse(req.params.id);
     const data = createLOISchema.parse(req.body);
@@ -163,6 +163,8 @@ router.post("/:id/lois", requireRole("investor"), async (req: Request, res: Resp
         email: data.email,
         phone: data.phone,
         intendedAmount: data.intendedAmount,
+        occupation: data.occupation || null,
+        city: data.city || null,
         signatureAcknowledged: data.signatureAcknowledged,
         status: "submitted",
       },
@@ -215,7 +217,7 @@ router.get("/:id/lois", requireRole("admin"), async (req: Request, res: Response
   }
 });
 
-// PATCH /offerings/:id/lois/:loiId — admin updates LOI status
+// PATCH /offerings/:id/lois/:loiId — admin updates LOI status with pipeline logic
 router.patch("/:id/lois/:loiId", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const offeringId = uuidParam.parse(req.params.id);
@@ -224,6 +226,7 @@ router.patch("/:id/lois/:loiId", requireRole("admin"), async (req: Request, res:
 
     const offering = await prisma.offering.findFirst({
       where: { id: offeringId, orgId: req.dbUser!.orgId },
+      include: { fund: true },
     });
     if (!offering) throw new NotFoundError("Offering", offeringId);
 
@@ -232,9 +235,104 @@ router.patch("/:id/lois/:loiId", requireRole("admin"), async (req: Request, res:
     });
     if (!existing) throw new NotFoundError("LetterOfIntent", loiId);
 
+    // Validate status transitions
+    const validTransitions: Record<string, string[]> = {
+      submitted: ["reviewed", "rejected", "withdrawn"],
+      reviewed: ["approved", "rejected", "withdrawn"],
+      approved: ["funded", "rejected", "withdrawn"],
+      funded: [], // terminal state
+      rejected: [], // terminal state
+      withdrawn: [], // terminal state
+    };
+    const allowed = validTransitions[existing.status] || [];
+    if (!allowed.includes(data.status)) {
+      throw new ValidationError(`Cannot transition LOI from "${existing.status}" to "${data.status}"`);
+    }
+
     const updateData: any = { status: data.status };
     if (data.status === "reviewed") {
       updateData.reviewedAt = new Date();
+    }
+
+    // When marking as "funded": create investment + auto-promote lead → investor
+    if (data.status === "funded") {
+      updateData.fundedAt = new Date();
+
+      const investor = await prisma.user.findUnique({ where: { id: existing.investorId } });
+      if (!investor) throw new NotFoundError("User", existing.investorId);
+
+      // Update investor name if missing (from LOI fullName)
+      if ((!investor.firstName || !investor.lastName) && existing.fullName) {
+        const parts = existing.fullName.trim().split(/\s+/);
+        const firstName = parts[0] || "";
+        const lastName = parts.slice(1).join(" ") || "";
+        if (firstName || lastName) {
+          await prisma.user.update({
+            where: { id: investor.id },
+            data: {
+              ...((!investor.firstName && firstName) ? { firstName } : {}),
+              ...((!investor.lastName && lastName) ? { lastName } : {}),
+            },
+          });
+        }
+      }
+
+      // Create the investment record (skip if already exists)
+      if (offering.fundId) {
+        // Fund offering → create fund investment
+        const existingFundInv = await prisma.fundInvestment.findFirst({
+          where: { fundId: offering.fundId, investorId: investor.id, deletedAt: null },
+        });
+        if (!existingFundInv) {
+          await prisma.fundInvestment.create({
+            data: {
+              fundId: offering.fundId,
+              investorId: investor.id,
+              amount: existing.intendedAmount,
+              startDate: new Date(),
+              status: "active",
+            },
+          });
+        }
+      } else if (offering.propertyId) {
+        // Property offering → create property investment
+        const existingPropInv = await prisma.investment.findFirst({
+          where: { investorId: investor.id, propertyId: offering.propertyId, deletedAt: null },
+        });
+        if (!existingPropInv) {
+          await prisma.investment.create({
+            data: {
+              investorId: investor.id,
+              propertyId: offering.propertyId,
+              amount: existing.intendedAmount,
+              startDate: new Date(),
+              status: "active",
+            },
+          });
+        }
+      }
+
+      // Auto-promote lead → investor (only if currently a lead)
+      if (investor.role === "lead") {
+        await prisma.user.update({
+          where: { id: investor.id },
+          data: { role: "investor" },
+        });
+
+        // Create investor profile if it doesn't exist
+        const existingProfile = await prisma.investorProfile.findUnique({
+          where: { userId: investor.id },
+        });
+        if (!existingProfile) {
+          await prisma.investorProfile.create({
+            data: {
+              userId: investor.id,
+              occupation: existing.occupation || undefined,
+              city: existing.city || undefined,
+            },
+          });
+        }
+      }
     }
 
     const loi = await prisma.letterOfIntent.update({
