@@ -1990,18 +1990,57 @@ function InvestorDocuments({ investor, reports, apiData }) {
     .filter(r => r.status === "Published" && inv.propertyIds.includes(r.propertyId))
     .map(r => {
       const p = props.find(pp => pp.id === r.propertyId);
-      return { name: `Performance Report — ${p?.name} — ${r.period}`, type: "Performance Report", date: r.createdAt, size: "280 KB", auto: true };
+      return { name: `Performance Report — ${p?.name} — ${r.period}`, type: "Performance Report", date: r.createdAt, size: "—", report: r, property: p };
     });
 
-  const docs = [
-    { name: "Investment Agreement", type: "Contract", date: "Mar 2022", size: "2.4 MB" },
-    { name: "Monthly Statement - Feb 2026", type: "Statement", date: "Mar 1, 2026", size: "340 KB" },
-    { name: "Annual Tax Summary 2025", type: "Tax", date: "Feb 15, 2026", size: "1.8 MB" },
-    ...reportDocs,
-    { name: "Property Portfolio Overview", type: "Report", date: "Jan 10, 2026", size: "5.2 MB" },
-    { name: "Distribution Schedule 2026", type: "Schedule", date: "Dec 20, 2025", size: "180 KB" },
-    { name: "Lease Extension Policy", type: "Policy", date: "Nov 5, 2025", size: "420 KB" },
-  ];
+  // Sort by date descending (most recent first)
+  const docs = [...reportDocs].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const handleDownload = (d) => {
+    if (d.report) {
+      const r = d.report;
+      const p = d.property;
+      const lines = [
+        `PERFORMANCE REPORT`,
+        `Property: ${p?.name || "—"}`,
+        `Location: ${p?.location || "—"}`,
+        `Period: ${r.period || "—"}`,
+        ``,
+        `Nights Booked: ${r.nightsBooked ?? "—"}`,
+        `Nights Available: ${r.nightsAvailable ?? "—"}`,
+        `Occupancy: ${r.occupancy ? r.occupancy + "%" : "—"}`,
+        ``,
+        `Gross Revenue: €${Number(r.grossRevenue || 0).toLocaleString()}`,
+        `Total Expenses: €${Number(r.totalExpenses || 0).toLocaleString()}`,
+        `Management Fee: €${Number(r.managementFee || 0).toLocaleString()}`,
+        `Net Profit: €${Number(r.netProfit || 0).toLocaleString()}`,
+        ``,
+        `Notes: ${r.notes || "—"}`,
+        `Published: ${r.createdAt || "—"}`,
+      ];
+      const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `report-${p?.name?.replace(/\s+/g, "-").toLowerCase() || "property"}-${r.period || "unknown"}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  if (docs.length === 0) {
+    return (
+      <>
+        <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>Your documents and statements</div>
+        <Card><div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📄</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 6 }}>No Documents Yet</div>
+          <div style={{ fontSize: 13, color: C.textMid, maxWidth: 360, margin: "0 auto" }}>When performance reports are published for your properties, they will appear here for download.</div>
+        </div></Card>
+      </>
+    );
+  }
+
   return (
     <>
       <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>Your documents and statements</div>
@@ -2014,12 +2053,12 @@ function InvestorDocuments({ investor, reports, apiData }) {
               <div style={{ width: 36, height: 36, borderRadius: 9, background: C.warm, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📄</div>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.dark }}>{d.name}</div>
-                <div style={{ fontSize: 11, color: C.textLight }}>{d.date} · {d.size}</div>
+                <div style={{ fontSize: 11, color: C.textLight }}>{d.date}</div>
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Badge label={d.type} variant="blue" />
-              <button style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT }}>Download</button>
+              <button onClick={() => handleDownload(d)} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT }}>Download</button>
             </div>
           </div>
         ))}
