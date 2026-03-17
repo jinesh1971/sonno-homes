@@ -190,17 +190,24 @@ export function DataProvider({ children, userRole }) {
       } else {
         // Investor or lead — only fetch what they can access
         const isInvestor = userRole === "investor";
-        const [propRes, offeringsRes, fundsRes, dashRes] = await Promise.all([
+        const [propRes, offeringsRes, fundsRes, dashRes, reportRes] = await Promise.all([
           propsPromise,
           offeringsPromise,
           fundsPromise,
           isInvestor ? api.fetchInvestorDashboard().catch(() => null) : Promise.resolve(null),
+          isInvestor ? api.fetchReports().catch(() => ({ reports: [] })) : Promise.resolve({ reports: [] }),
         ]);
 
         const props = (propRes.properties || []).map(transformProperty);
         setProperties(props);
         setOfferings(Array.isArray(offeringsRes) ? offeringsRes : (offeringsRes || []));
         setFunds(Array.isArray(fundsRes) ? fundsRes : (fundsRes?.data || fundsRes || []));
+
+        // Set reports for investor (backend filters to published reports for their properties)
+        if (isInvestor) {
+          const reps = (reportRes.reports || []).map(transformReport);
+          setReports(reps);
+        }
 
         // Build investorData from dashboard response for the logged-in investor
         if (dashRes) {

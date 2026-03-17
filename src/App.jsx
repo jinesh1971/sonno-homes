@@ -476,9 +476,11 @@ function AuthenticatedApp() {
   useEffect(() => {
     if (!isLoaded || !user) return;
     let cancelled = false;
+    let hasInitialRole = false;
     const syncRole = async () => {
       try {
-        if (!cancelled && !userRole) setSyncing(true);
+        // Only show loading spinner on first sync, never on polling
+        if (!cancelled && !hasInitialRole) setSyncing(true);
         const token = await getToken();
         const res = await fetch("/api/v1/auth/sync", {
           method: "POST",
@@ -495,21 +497,29 @@ function AuthenticatedApp() {
         if (!cancelled) {
           console.log("Auth sync response:", data);
           if (data.success) {
-            setUserRole(data.data.role || "lead");
+            const newRole = data.data.role || "lead";
+            setUserRole(prev => prev === newRole ? prev : newRole);
+            hasInitialRole = true;
           } else {
             console.warn("Auth sync failed:", data);
-            if (!userRole) setUserRole("lead");
+            if (!hasInitialRole) {
+              setUserRole("lead");
+              hasInitialRole = true;
+            }
           }
         }
       } catch (e) {
         console.error("Auth sync fetch failed:", e);
-        if (!cancelled && !userRole) setUserRole("lead");
+        if (!cancelled && !hasInitialRole) {
+          setUserRole("lead");
+          hasInitialRole = true;
+        }
       } finally {
         if (!cancelled) setSyncing(false);
       }
     };
     syncRole();
-    // Re-check role every 30s to pick up promotions
+    // Re-check role every 30s to pick up promotions (silently, no loading spinner)
     const interval = setInterval(syncRole, 30000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [isLoaded, user, getToken]);
