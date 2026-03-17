@@ -13,10 +13,12 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: DEV_BYPASS_AUTH
-        value: "true"
+        value: "false"
       - key: CLERK_SECRET_KEY
-        value: sk_test_placeholder
+        sync: false
       - key: CLERK_PUBLISHABLE_KEY
-        value: pk_test_placeholder
+        sync: false
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        sync: false
       - key: FRONTEND_URL
         sync: false
