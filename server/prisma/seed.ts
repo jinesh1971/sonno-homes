@@ -47,6 +47,20 @@ async function main() {
     },
   });
 
+  await prisma.user.upsert({
+    where: { clerkId: "clerk_admin_003" },
+    update: {},
+    create: {
+      id: "a0000000-0000-0000-0000-000000000003",
+      orgId: org.id,
+      clerkId: "clerk_admin_003",
+      email: "eklein@sonnohomes.com",
+      role: "admin",
+      firstName: "Eric",
+      lastName: "Klein",
+    },
+  });
+
   // 3. Properties
   const propertyData = [
     { id: "10000000-0000-0000-0000-000000000001", name: "Villa Serena", propertyType: "Villa", location: "Amalfi Coast, Campania", region: "Campania", bedrooms: 4, contractYears: 5, monthlyYield: 1.9, propertyValue: 450000, status: "active" as const, acquisitionDate: new Date("2022-03-01") },
