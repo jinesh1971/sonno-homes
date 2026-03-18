@@ -81,7 +81,10 @@ router.get("/investor", requireRole("investor"), async (req: Request, res: Respo
       prisma.fundInvestment.findMany({
         where: { investorId: userId, status: "active" },
         select: {
+          id: true,
+          fundId: true,
           amount: true,
+          fund: { select: { id: true, name: true, quarterYear: true, quarterNumber: true } },
           distributions: { select: { amount: true, status: true } },
         },
       }),
@@ -125,15 +128,29 @@ router.get("/investor", requireRole("investor"), async (req: Request, res: Respo
       s + fi.distributions.filter((d: any) => d.status === "paid").reduce((ds: number, d: any) => ds + Number(d.amount), 0), 0);
     const fundROI = totalFundInvested > 0 ? Math.round((totalFundDistributions / totalFundInvested) * 10000) / 100 : 0;
 
+    // Fund allocation details
+    const fundAllocation = investorFundInvestments.map((fi: any) => ({
+      fundId: fi.fundId,
+      fundName: fi.fund.name,
+      invested: Number(fi.amount),
+      distributions: fi.distributions.filter((d: any) => d.status === "paid").reduce((s: number, d: any) => s + Number(d.amount), 0),
+    }));
+
+    // Combined totals (property + fund)
+    const combinedInvested = totalInvested + totalFundInvested;
+    const combinedDistributed = totalDistributed + totalFundDistributions;
+
     res.json({
       success: true,
       data: {
-        totalInvested,
-        totalDistributed,
-        overallROI: totalInvested > 0 ? Math.round((totalDistributed / totalInvested) * 10000) / 100 : 0,
+        totalInvested: combinedInvested,
+        totalDistributed: combinedDistributed,
+        overallROI: combinedInvested > 0 ? Math.round((combinedDistributed / combinedInvested) * 10000) / 100 : 0,
         propertyCount: investments.length,
+        fundCount: investorFundInvestments.length,
         allocation,
         roiByProperty,
+        fundAllocation,
         fundMetrics: {
           totalFundInvested,
           totalFundDistributions,

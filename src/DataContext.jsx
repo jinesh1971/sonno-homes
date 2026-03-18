@@ -213,14 +213,14 @@ export function DataProvider({ children, userRole }) {
         if (dashRes) {
           setInvestorDashboard(dashRes);
           const alloc = dashRes.allocation || [];
+          const fundAlloc = dashRes.fundAllocation || [];
           const totalInv = Number(dashRes.totalInvested || 0);
           const totalDist = Number(dashRes.totalDistributed || 0);
           const propertyIds = alloc.map(a => a.propertyId);
           const investmentMap = {};
           alloc.forEach(a => { investmentMap[a.propertyId] = Number(a.invested); });
           const roiPct = totalInv > 0 ? (totalDist / totalInv) * 100 : 0;
-          // Use real data — no fake distributions
-          const distributions = []; // Will be populated when admin creates actual distributions
+          const distributions = [];
           const contractEnd = new Date();
           contractEnd.setFullYear(contractEnd.getFullYear() + 5);
           setInvestorData([{
@@ -233,6 +233,7 @@ export function DataProvider({ children, userRole }) {
             invested: totalInv,
             propertyIds,
             investments: investmentMap,
+            fundAllocation: fundAlloc,
             startDate: new Date().toISOString(),
             monthsActive: 0,
             futureCommitment: false,

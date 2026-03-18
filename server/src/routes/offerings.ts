@@ -59,9 +59,24 @@ router.get("/", async (req: Request, res: Response, next: NextFunction) => {
       include: { property: true, fund: true },
     });
 
+    // For investors/leads, include their LOI status per offering
+    let userLOIs: Record<string, string> = {};
+    if (req.dbUser!.role === "investor" || req.dbUser!.role === "lead") {
+      const lois = await prisma.letterOfIntent.findMany({
+        where: {
+          investorId: req.dbUser!.id,
+          offeringId: { in: offerings.map(o => o.id) },
+          status: { in: ["submitted", "reviewed", "approved", "funded"] },
+        },
+        select: { offeringId: true, status: true },
+      });
+      lois.forEach(l => { userLOIs[l.offeringId] = l.status; });
+    }
+
     const data = offerings.map((o) => ({
       ...o,
       productType: o.fundId ? "fund" : "property",
+      myLOIStatus: userLOIs[o.id] || null,
     }));
 
     res.json({ success: true, data });
@@ -153,6 +168,18 @@ router.post("/:id/lois", requireRole("investor", "lead"), async (req: Request, r
           `Intended amount must be at least ${offering.fund.minimumInvestment}`
         );
       }
+    }
+
+    // Prevent duplicate LOIs — one active LOI per user per offering
+    const existingLOI = await prisma.letterOfIntent.findFirst({
+      where: {
+        offeringId,
+        investorId: req.dbUser!.id,
+        status: { in: ["submitted", "reviewed", "approved", "funded"] },
+      },
+    });
+    if (existingLOI) {
+      throw new ValidationError("You have already submitted a Letter of Intent for this offering");
     }
 
     const loi = await prisma.letterOfIntent.create({

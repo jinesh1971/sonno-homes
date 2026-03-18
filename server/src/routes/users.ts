@@ -104,7 +104,8 @@ router.delete("/:id", requireRole("admin"), async (req: Request, res: Response, 
       throw new ForbiddenError("Cannot delete your own account");
     }
 
-    // Delete all related data in order (respecting FK constraints)
+    // Soft-delete: set deletedAt so auth sync can detect deleted users
+    // Also clean up related data
     await prisma.documentRecipient.deleteMany({ where: { investorId: id } });
     await prisma.distribution.deleteMany({ where: { investment: { investorId: id } } });
     await prisma.distribution.deleteMany({ where: { fundInvestment: { investorId: id } } });
@@ -114,7 +115,7 @@ router.delete("/:id", requireRole("admin"), async (req: Request, res: Response, 
     await prisma.investorProfile.deleteMany({ where: { userId: id } });
     await prisma.auditLog.deleteMany({ where: { userId: id } });
     await prisma.document.deleteMany({ where: { uploadedBy: id } });
-    await prisma.user.delete({ where: { id } });
+    await prisma.user.update({ where: { id }, data: { deletedAt: new Date() } });
 
     res.json({ success: true, data: { message: "Investor and all related data permanently deleted" } });
   } catch (err) { next(err); }

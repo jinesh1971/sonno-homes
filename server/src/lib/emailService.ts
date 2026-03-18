@@ -54,14 +54,21 @@ export async function sendLOINotification(payload: LOINotificationPayload): Prom
   }
 
   try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: adminEmails,
-      subject,
-      html,
-      text,
-    });
-    console.log(`[EmailService] LOI notification sent to ${adminEmails.join(", ")}`);
+    // Send to each admin individually (Resend free tier only allows sending to account owner)
+    for (const email of adminEmails) {
+      try {
+        await resend.emails.send({
+          from: FROM_EMAIL,
+          to: [email],
+          subject,
+          html,
+          text,
+        });
+        console.log(`[EmailService] LOI notification sent to ${email}`);
+      } catch (err: any) {
+        console.warn(`[EmailService] Failed to send to ${email}: ${err?.message || err}`);
+      }
+    }
   } catch (err) {
     console.error(`[EmailService] Failed to send LOI notification:`, err);
   }

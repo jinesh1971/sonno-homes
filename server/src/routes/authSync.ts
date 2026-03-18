@@ -20,6 +20,14 @@ router.post("/", async (req: Request, res: Response) => {
     let user = await prisma.user.findUnique({ where: { clerkId } });
 
     if (user) {
+      // If user was soft-deleted by admin, reject the sync
+      if (user.deletedAt) {
+        return res.status(403).json({
+          success: false,
+          error: { code: "USER_DELETED", message: "Your account has been removed. Please contact an administrator." },
+          deleted: true,
+        });
+      }
       // User exists — update name/phone if they were empty (e.g., first sync didn't have them)
       const updates: any = {};
       if ((!user.firstName || !user.lastName) && (firstName || lastName)) {
@@ -47,6 +55,16 @@ router.post("/", async (req: Request, res: Response) => {
         data: updateData,
       });
       return res.json({ success: true, data: { id: user.id, role: user.role, email: user.email } });
+    }
+
+    // Check if user was previously deleted by admin — don't re-create them
+    const deletedUser = await prisma.user.findFirst({ where: { email, deletedAt: { not: null } } });
+    if (deletedUser) {
+      return res.status(403).json({
+        success: false,
+        error: { code: "USER_DELETED", message: "Your account has been removed. Please contact an administrator." },
+        deleted: true,
+      });
     }
 
     // New user — get the default org

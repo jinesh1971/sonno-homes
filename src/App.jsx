@@ -468,7 +468,7 @@ export default function SonnoHomesApp() {
 
 function AuthenticatedApp() {
   const { user, isLoaded } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, signOut } = useAuth();
   const [userRole, setUserRole] = useState(null);
   const [syncing, setSyncing] = useState(true);
   const getTokenRef = useRef(getToken);
@@ -495,6 +495,12 @@ function AuthenticatedApp() {
         });
         const data = await res.json();
         if (!cancelled) {
+          // If user was deleted by admin, sign them out immediately
+          if (data.deleted) {
+            alert("Your account has been removed. You will be signed out.");
+            signOut();
+            return;
+          }
           if (data.success) {
             const newRole = data.data.role || "lead";
             setUserRole(prev => prev === newRole ? prev : newRole);
@@ -607,6 +613,7 @@ function SonnoHomes({ userRole = "admin", clerkUser }) {
   const adminNav = [
     { id: "dashboard", label: "Dashboard", icon: "◫" },
     { id: "investors", label: "Investors", icon: "◉" },
+    { id: "users", label: "Users", icon: "👤" },
     { id: "properties", label: "Properties", icon: "⊞" },
     { id: "offerings", label: "Offerings", icon: "📋" },
     { id: "distributions", label: "Distributions", icon: "◈" },
@@ -719,6 +726,7 @@ function SonnoHomes({ userRole = "admin", clerkUser }) {
             {(() => { const apiData = { investorData: INVESTOR_DATA_API, properties: PROPERTIES_API, offerings: OFFERINGS_API, funds: FUNDS_API, totalInvested: TOTAL_INVESTED_API, totalDistributed: TOTAL_DISTRIBUTED_API, avgROI: AVG_ROI_API, refresh }; const reps = reports.length > 0 ? reports : INITIAL_REPORTS; return (<>
             {view === "admin" && page === "dashboard" && <><AdminDashboard onViewInvestor={i => { setSelectedInvestor(i); setPage("investors"); }} apiData={apiData} /><FundDashboardSection isAdmin={true} apiData={apiData} /></>}
             {view === "admin" && page === "investors" && <AdminInvestors selected={selectedInvestor} onSelect={setSelectedInvestor} apiData={apiData} />}
+            {view === "admin" && page === "users" && <AdminUsers apiData={apiData} />}
             {view === "admin" && page === "properties" && <AdminProperties apiData={apiData} />}
             {view === "admin" && page === "offerings" && <OfferingsListView apiData={apiData} isAdmin={true} onViewDetail={(o) => { setSelectedOffering(o); setPage("offering-detail"); }} onViewFund={(f) => { setSelectedFund(f); setPage("fund-detail"); }} />}
             {view === "admin" && page === "offering-detail" && selectedOffering && <OfferingDetailView offering={selectedOffering} apiData={apiData} isAdmin={true} onBack={() => setPage("offerings")} refresh={refresh} />}
@@ -1050,6 +1058,86 @@ function AdminInvestors({ selected, onSelect, apiData }) {
   );
 }
 
+function AdminUsers({ apiData }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(null);
+
+  const loadUsers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { fetchUsers } = await import("./api.js");
+      const res = await fetchUsers();
+      setUsers(res.users || []);
+    } catch (err) {
+      console.error("Failed to load users:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  const handleDelete = async (user) => {
+    if (!confirm(`Delete ${user.firstName} ${user.lastName} (${user.email})? This will permanently remove the user and all their data.`)) return;
+    setDeleting(user.id);
+    try {
+      const { deleteUser } = await import("./api.js");
+      await deleteUser(user.id);
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+      if (apiData?.refresh) apiData.refresh();
+    } catch (err) {
+      alert("Failed to delete user: " + err.message);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const roleBadge = (role) => {
+    const colors = { admin: { bg: `${C.accent}15`, color: C.accent }, investor: { bg: `${C.green}15`, color: C.green }, lead: { bg: "#f59e0b20", color: "#d97706" } };
+    const c = colors[role] || colors.lead;
+    return <span style={{ padding: "3px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: c.bg, color: c.color, textTransform: "capitalize" }}>{role}</span>;
+  };
+
+  if (loading) return <Card><div style={{ textAlign: "center", padding: 40, color: C.textMid }}>Loading users...</div></Card>;
+
+  return (
+    <>
+      <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>All registered users across the platform — admins, investors, and leads</div>
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.dark }}>All Users ({users.length})</div>
+            <div style={{ fontSize: 11, color: C.textMid, marginTop: 2 }}>Manage platform users</div>
+          </div>
+        </div>
+        <SortableTable
+          columns={[
+            { key: "name", label: "Name", render: u => (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: `${C.accent}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: C.accent }}>
+                  {((u.firstName || "")[0] || "").toUpperCase()}{((u.lastName || "")[0] || "").toUpperCase()}
+                </div>
+                <span style={{ fontWeight: 600, color: C.dark }}>{(u.firstName || "").charAt(0).toUpperCase() + (u.firstName || "").slice(1)} {(u.lastName || "").charAt(0).toUpperCase() + (u.lastName || "").slice(1)}</span>
+              </div>
+            )},
+            { key: "email", label: "Email", render: u => <span style={{ fontSize: 12, color: C.textMid }}>{u.email}</span> },
+            { key: "role", label: "Role", render: u => roleBadge(u.role) },
+            { key: "createdAt", label: "Joined", render: u => <span style={{ fontSize: 12, color: C.textMid }}>{new Date(u.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span> },
+            { key: "actions", label: "", render: u => u.role !== "admin" ? (
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(u); }} disabled={deleting === u.id}
+                style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.red}30`, background: `${C.red}08`, color: C.red, cursor: deleting === u.id ? "default" : "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT, opacity: deleting === u.id ? 0.5 : 1 }}>
+                {deleting === u.id ? "Deleting..." : "Delete"}
+              </button>
+            ) : <span style={{ fontSize: 11, color: C.textLight }}>—</span> },
+          ]}
+          data={users}
+        />
+      </Card>
+    </>
+  );
+}
+
 function AdminProperties({ apiData }) {
   const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
   const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
@@ -1254,14 +1342,20 @@ function AdminReports({ apiData }) {
 // ── ADMIN CREATE REPORT ──────────────────────────────────────────────────────
 function AdminCreateReport({ reports, onAddReport, apiData }) {
   const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
+  const fundsData = apiData?.funds || [];
+  const [reportType, setReportType] = useState("property"); // "property" or "fund"
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [selectedFundId, setSelectedFundId] = useState("");
   const [period, setPeriod] = useState("2026-02");
+  const [fundQuarter, setFundQuarter] = useState("1");
+  const [fundYear, setFundYear] = useState("2026");
   const [nightsBooked, setNightsBooked] = useState("");
   const [nightsAvailable, setNightsAvailable] = useState("28");
   const [grossRevenue, setGrossRevenue] = useState("");
   const [expenses, setExpenses] = useState([{ category: "Rent", amount: "" }, { category: "Cleaning", amount: "" }, { category: "Utilities", amount: "" }]);
   const [generated, setGenerated] = useState(null);
   const [viewingReport, setViewingReport] = useState(null);
+  const [fundSubmitting, setFundSubmitting] = useState(false);
 
   const addExpense = () => setExpenses([...expenses, { category: "", amount: "" }]);
   const removeExpense = (idx) => setExpenses(expenses.filter((_, i) => i !== idx));
@@ -1272,7 +1366,34 @@ function AdminCreateReport({ reports, onAddReport, apiData }) {
   const managementFee = Math.round(grossProfit * 0.20);
   const netProfit = grossProfit - managementFee;
 
+  const handleGenerateFundReport = async () => {
+    if (!selectedFundId) return;
+    setFundSubmitting(true);
+    try {
+      const { createFundReport, publishFundReport } = await import("./api.js");
+      const created = await createFundReport(selectedFundId, {
+        quarterYear: parseInt(fundYear),
+        quarterNumber: parseInt(fundQuarter),
+      });
+      // Auto-publish the fund report
+      await publishFundReport(selectedFundId, created.id);
+      const fund = fundsData.find(f => f.id === selectedFundId);
+      setGenerated({
+        isFund: true,
+        property: { name: fund?.name || "Fund", location: "Fund Investment" },
+        period: `Q${fundQuarter} ${fundYear}`,
+        investorsLinked: [],
+      });
+      if (apiData?.refresh) apiData.refresh();
+    } catch (err) {
+      alert("Failed to create fund report: " + err.message);
+    } finally {
+      setFundSubmitting(false);
+    }
+  };
+
   const handleGenerate = () => {
+    if (reportType === "fund") { handleGenerateFundReport(); return; }
     const prop = props.find(p => p.id === selectedPropertyId);
     if (!prop) return;
     const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
@@ -1381,69 +1502,126 @@ function AdminCreateReport({ reports, onAddReport, apiData }) {
         {/* Create Report Form */}
         <Card>
           <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 4 }}>Create Performance Report</div>
-          <div style={{ fontSize: 12, color: C.textMid, marginBottom: 20 }}>Select a property, enter the period data, and generate a report for investors</div>
+          <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16 }}>Select a property or fund, enter the period data, and generate a report for investors</div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Property</div>
-              <select value={selectedPropertyId} onChange={e => setSelectedPropertyId(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, appearance: "auto" }}>
-                <option value="">Select property...</option>
-                {props.map(p => <option key={p.id} value={p.id}>{p.img} {p.name} — {p.location}</option>)}
-              </select>
-            </div>
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Reporting Period</div>
-              <input type="month" value={period} onChange={e => setPeriod(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Nights Booked</div>
-              <input type="number" placeholder="e.g. 28" value={nightsBooked} onChange={e => setNightsBooked(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Nights Available</div>
-              <input type="number" placeholder="e.g. 31" value={nightsAvailable} onChange={e => setNightsAvailable(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Gross Revenue</div>
-              <input type="number" placeholder="e.g. 8400" value={grossRevenue} onChange={e => setGrossRevenue(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
-            </div>
+          {/* Report Type Toggle */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 18, background: C.warm, borderRadius: 8, padding: 3 }}>
+            {[{ id: "property", label: "Property Report" }, { id: "fund", label: "Fund Report" }].map(t => (
+              <button key={t.id} onClick={() => { setReportType(t.id); setGenerated(null); }}
+                style={{ flex: 1, padding: "8px 0", borderRadius: 6, border: "none", fontSize: 12, fontWeight: 600, background: reportType === t.id ? C.accent : "transparent", color: reportType === t.id ? "#fff" : C.textMid, cursor: "pointer", fontFamily: FONT, transition: "all 0.2s" }}>
+                {t.label}
+              </button>
+            ))}
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>Expenses</div>
-            <button onClick={addExpense} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT, color: C.accent }}>+ Add Line Item</button>
-          </div>
-          {expenses.map((exp, i) => (
-            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "center" }}>
-              <input placeholder="Category (e.g. Rent)" value={exp.category} onChange={e => updateExpense(i, "category", e.target.value)} style={{ flex: 2, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm }} />
-              <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateExpense(i, "amount", e.target.value)} style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm }} />
-              {expenses.length > 1 && <button onClick={() => removeExpense(i)} style={{ width: 32, height: 32, borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 14, color: C.red, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>}
-            </div>
-          ))}
+          {reportType === "property" ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Property</div>
+                  <select value={selectedPropertyId} onChange={e => setSelectedPropertyId(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, appearance: "auto" }}>
+                    <option value="">Select property...</option>
+                    {props.map(p => <option key={p.id} value={p.id}>{p.img} {p.name} — {p.location}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Reporting Period</div>
+                  <input type="month" value={period} onChange={e => setPeriod(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Nights Booked</div>
+                  <input type="number" placeholder="e.g. 28" value={nightsBooked} onChange={e => setNightsBooked(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Nights Available</div>
+                  <input type="number" placeholder="e.g. 31" value={nightsAvailable} onChange={e => setNightsAvailable(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Gross Revenue</div>
+                  <input type="number" placeholder="e.g. 8400" value={grossRevenue} onChange={e => setGrossRevenue(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, boxSizing: "border-box" }} />
+                </div>
+              </div>
 
-          <button onClick={handleGenerate} disabled={!selectedPropertyId || !grossRevenue} style={{ marginTop: 18, padding: "10px 28px", borderRadius: 9, border: "none", background: !selectedPropertyId || !grossRevenue ? C.border : C.accent, color: "#fff", cursor: !selectedPropertyId || !grossRevenue ? "default" : "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
-            Generate Report
-          </button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.dark }}>Expenses</div>
+                <button onClick={addExpense} style={{ padding: "5px 12px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: FONT, color: C.accent }}>+ Add Line Item</button>
+              </div>
+              {expenses.map((exp, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "center" }}>
+                  <input placeholder="Category (e.g. Rent)" value={exp.category} onChange={e => updateExpense(i, "category", e.target.value)} style={{ flex: 2, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm }} />
+                  <input type="number" placeholder="Amount" value={exp.amount} onChange={e => updateExpense(i, "amount", e.target.value)} style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm }} />
+                  {expenses.length > 1 && <button onClick={() => removeExpense(i)} style={{ width: 32, height: 32, borderRadius: 6, border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", fontSize: 14, color: C.red, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>}
+                </div>
+              ))}
+
+              <button onClick={handleGenerate} disabled={!selectedPropertyId || !grossRevenue} style={{ marginTop: 18, padding: "10px 28px", borderRadius: 9, border: "none", background: !selectedPropertyId || !grossRevenue ? C.border : C.accent, color: "#fff", cursor: !selectedPropertyId || !grossRevenue ? "default" : "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                Generate Report
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Fund</div>
+                  <select value={selectedFundId} onChange={e => setSelectedFundId(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, appearance: "auto" }}>
+                    <option value="">Select fund...</option>
+                    {fundsData.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Quarter</div>
+                  <select value={fundQuarter} onChange={e => setFundQuarter(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, appearance: "auto" }}>
+                    <option value="1">Q1 (Jan–Mar)</option>
+                    <option value="2">Q2 (Apr–Jun)</option>
+                    <option value="3">Q3 (Jul–Sep)</option>
+                    <option value="4">Q4 (Oct–Dec)</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>Year</div>
+                  <select value={fundYear} onChange={e => setFundYear(e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: FONT, color: C.dark, background: C.warm, appearance: "auto" }}>
+                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: C.textMid, marginBottom: 16, padding: "10px 14px", background: `${C.accent}08`, borderRadius: 8, border: `1px solid ${C.accent}20` }}>
+                Fund reports aggregate data from all published property reports within the selected quarter. Make sure individual property reports are created first.
+              </div>
+              <button onClick={handleGenerate} disabled={!selectedFundId || fundSubmitting} style={{ marginTop: 4, padding: "10px 28px", borderRadius: 9, border: "none", background: !selectedFundId || fundSubmitting ? C.border : C.accent, color: "#fff", cursor: !selectedFundId || fundSubmitting ? "default" : "pointer", fontSize: 13, fontWeight: 600, fontFamily: FONT }}>
+                {fundSubmitting ? "Creating..." : "Generate Fund Report"}
+              </button>
+            </>
+          )}
         </Card>
 
         {/* Live Preview */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Card>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 14 }}>Live Calculation</div>
-            {[
-              { label: "Gross Revenue", value: euro(parseFloat(grossRevenue) || 0), color: C.dark },
-              { label: "Total Expenses", value: euro(totalExpenses), color: C.red },
-              { label: "Gross Profit", value: euro(grossProfit), color: grossProfit >= 0 ? C.dark : C.red },
-              { label: "Sonno Fee (20%)", value: euro(managementFee), color: C.accent },
-              { label: "Net to Investors", value: euro(netProfit), color: C.green },
-            ].map((s, i) => (
-              <div key={s.label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
-                <span style={{ fontSize: 13, color: C.textMid }}>{s.label}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.value}</span>
+          {reportType === "property" && (
+            <Card>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 14 }}>Live Calculation</div>
+              {[
+                { label: "Gross Revenue", value: euro(parseFloat(grossRevenue) || 0), color: C.dark },
+                { label: "Total Expenses", value: euro(totalExpenses), color: C.red },
+                { label: "Gross Profit", value: euro(grossProfit), color: grossProfit >= 0 ? C.dark : C.red },
+                { label: "Sonno Fee (20%)", value: euro(managementFee), color: C.accent },
+                { label: "Net to Investors", value: euro(netProfit), color: C.green },
+              ].map((s, i) => (
+                <div key={s.label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
+                  <span style={{ fontSize: 13, color: C.textMid }}>{s.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.value}</span>
+                </div>
+              ))}
+            </Card>
+          )}
+          {reportType === "fund" && selectedFundId && (
+            <Card>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 14 }}>Fund Report Info</div>
+              <div style={{ fontSize: 12, color: C.textMid, lineHeight: 1.6 }}>
+                Fund reports automatically aggregate metrics from all published property reports within Q{fundQuarter} {fundYear}. The report will include average occupancy, total revenue, total expenses, and net profit across all fund properties.
               </div>
-            ))}
-          </Card>
-          {selectedPropertyId && (
+            </Card>
+          )}
+          {reportType === "property" && selectedPropertyId && (
             <Card>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.dark, marginBottom: 10 }}>Will Be Shared With</div>
               <div style={{ fontSize: 11, color: C.textMid, marginBottom: 10 }}>Investors linked to this property</div>
@@ -1927,16 +2105,15 @@ function InvestorProperties({ investor, selectedProperty, onSelectProperty, repo
     );
   }
 
+  const fundAlloc = inv.fundAllocation || [];
+  const euro = v => `€${Number(v).toLocaleString()}`;
+  const hasProperties = inv.propertyIds.length > 0;
+  const hasFunds = fundAlloc.length > 0;
+
   return (
     <>
-      <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>{inv.propertyIds.length} properties linked to your investment{inv.propertyIds.length > 0 ? " · Click to view details" : ""}</div>
-      {inv.propertyIds.length === 0 ? (
-        <Card><div style={{ textAlign: "center", padding: 40 }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🏡</div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 6 }}>No Properties Yet</div>
-          <div style={{ fontSize: 13, color: C.textMid, maxWidth: 360, margin: "0 auto" }}>Once your investment is funded through an offering, your properties will appear here with performance details and reports.</div>
-        </div></Card>
-      ) : (
+      {hasProperties && <div style={{ marginBottom: 20, fontSize: 13, color: C.textMid }}>{inv.propertyIds.length} properties linked to your investment · Click to view details</div>}
+      {hasProperties && (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
         {inv.propertyIds.map(pid => {
           const p = props.find(pp => pp.id === pid);
@@ -1977,6 +2154,43 @@ function InvestorProperties({ investor, selectedProperty, onSelectProperty, repo
         })}
       </div>
       )}
+
+      {hasFunds && (
+        <>
+          <div style={{ marginTop: hasProperties ? 28 : 0, marginBottom: 16, fontSize: 15, fontWeight: 700, color: C.dark, fontFamily: DISPLAY }}>My Fund Investments</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+            {fundAlloc.map(f => (
+              <Card key={f.fundId}>
+                <div style={{ display: "flex", gap: 16 }}>
+                  <div style={{ width: 80, height: 80, borderRadius: 12, background: `linear-gradient(135deg, ${C.accent}20, ${C.accentSoft}20)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, flexShrink: 0 }}>📦</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: C.dark, fontFamily: DISPLAY, marginBottom: 4 }}>{f.fundName}</div>
+                    <Badge label="Fund" variant="blue" />
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 9.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.05em" }}>Invested</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.dark, marginTop: 2 }}>{euro(f.invested)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 9.5, fontWeight: 600, color: C.textLight, textTransform: "uppercase", letterSpacing: "0.05em" }}>Distributed</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: C.green, marginTop: 2 }}>{euro(f.distributions)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!hasProperties && !hasFunds && (
+        <Card><div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🏡</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: C.dark, marginBottom: 6 }}>No Investments Yet</div>
+          <div style={{ fontSize: 13, color: C.textMid, maxWidth: 360, margin: "0 auto" }}>Once your investment is funded through an offering, your properties and funds will appear here.</div>
+        </div></Card>
+      )}
     </>
   );
 }
@@ -1985,12 +2199,15 @@ function InvestorDocuments({ investor, reports, apiData }) {
   const investors = apiData?.investorData?.length > 0 ? apiData.investorData : INVESTOR_DATA;
   const props = apiData?.properties?.length > 0 ? apiData.properties : PROPERTIES;
   const inv = investors.find(i => i.id === investor?.id) || investors[0];
-  // Auto-generated report documents for this investor's properties
+  // For investor view (id === "me"), the backend already filters reports to only
+  // return published reports for their properties, so show all of them.
+  // For admin view, filter by the investor's propertyIds.
+  const isInvestorView = inv.id === "me";
   const reportDocs = reports
-    .filter(r => r.status === "Published" && inv.propertyIds.includes(r.propertyId))
+    .filter(r => r.status === "Published" && (isInvestorView || inv.propertyIds.includes(r.propertyId)))
     .map(r => {
       const p = props.find(pp => pp.id === r.propertyId);
-      return { name: `Performance Report — ${p?.name} — ${r.period}`, type: "Performance Report", date: r.createdAt, size: "—", report: r, property: p };
+      return { name: `Performance Report — ${p?.name || "Property"} — ${r.period}`, type: "Performance Report", date: r.createdAt, size: "—", report: r, property: p };
     });
 
   // Sort by date descending (most recent first)
@@ -2501,8 +2718,13 @@ function OfferingDetailView({ offering, apiData, isAdmin, onBack, refresh }) {
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
-        {!isAdmin && !isFunded && offering.status === "open" && (
+        {!isAdmin && !isFunded && offering.status === "open" && !offering.myLOIStatus && (
           <button onClick={() => setShowLOI(true)} style={{ padding: "11px 28px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.accent}, ${C.accentSoft})`, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: `0 4px 14px ${C.accent}40` }}>Invest Now</button>
+        )}
+        {!isAdmin && offering.myLOIStatus && (
+          <div style={{ padding: "11px 28px", borderRadius: 10, background: offering.myLOIStatus === "funded" ? C.green + "18" : C.accent + "15", color: offering.myLOIStatus === "funded" ? C.green : C.accent, fontSize: 14, fontWeight: 700, fontFamily: FONT }}>
+            {offering.myLOIStatus === "submitted" ? "✓ LOI Submitted" : offering.myLOIStatus === "reviewed" ? "✓ Under Review" : offering.myLOIStatus === "approved" ? "✓ Approved" : offering.myLOIStatus === "funded" ? "✓ Funded" : "✓ LOI Submitted"}
+          </div>
         )}
         {isAdmin && offering.status === "draft" && (
           <button onClick={() => handleStatusChange("open")} disabled={statusUpdating} style={{ padding: "10px 22px", borderRadius: 9, border: "none", background: C.green, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: FONT, opacity: statusUpdating ? 0.6 : 1 }}>Publish (Open)</button>
@@ -2690,9 +2912,16 @@ function FundDetailView({ fund: initialFund, apiData, isAdmin, onBack, refresh }
       )}
 
       {/* Invest Now for investors */}
-      {!isAdmin && fund.status === "open" && offering && (
+      {!isAdmin && fund.status === "open" && offering && !offering.myLOIStatus && (
         <div style={{ marginBottom: 18 }}>
           <button onClick={() => setShowLOI(true)} style={{ padding: "11px 28px", borderRadius: 10, border: "none", background: `linear-gradient(135deg, ${C.accent}, ${C.accentSoft})`, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: FONT, boxShadow: `0 4px 14px ${C.accent}40` }}>Invest Now</button>
+        </div>
+      )}
+      {!isAdmin && offering?.myLOIStatus && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ padding: "11px 28px", borderRadius: 10, background: offering.myLOIStatus === "funded" ? C.green + "18" : C.accent + "15", color: offering.myLOIStatus === "funded" ? C.green : C.accent, fontSize: 14, fontWeight: 700, fontFamily: FONT, display: "inline-block" }}>
+            {offering.myLOIStatus === "submitted" ? "✓ LOI Submitted" : offering.myLOIStatus === "reviewed" ? "✓ Under Review" : offering.myLOIStatus === "approved" ? "✓ Approved" : offering.myLOIStatus === "funded" ? "✓ Funded" : "✓ LOI Submitted"}
+          </div>
         </div>
       )}
 
