@@ -1,3 +1,8 @@
+import { Resend } from "resend";
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const FROM_EMAIL = process.env.RESEND_FROM || "Sonno Homes <onboarding@resend.dev>";
+
 export interface LOINotificationPayload {
   investorName: string;
   offeringTitle: string;
@@ -6,16 +11,12 @@ export interface LOINotificationPayload {
   adminEmails: string[];
 }
 
-/**
- * Sends an LOI notification email to all admin users.
- * In dev mode (no SMTP config), logs to console instead of sending.
- */
 export async function sendLOINotification(payload: LOINotificationPayload): Promise<void> {
   const { investorName, offeringTitle, intendedAmount, submittedAt, adminEmails } = payload;
 
   const formattedAmount = new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency: "EUR",
   }).format(intendedAmount);
 
   const formattedDate = submittedAt.toLocaleString("en-US", {
@@ -24,97 +25,98 @@ export async function sendLOINotification(payload: LOINotificationPayload): Prom
   });
 
   const subject = `New LOI Submitted: ${offeringTitle}`;
-  const body = [
-    `A new Letter of Intent has been submitted.`,
-    ``,
-    `Investor: ${investorName}`,
-    `Offering: ${offeringTitle}`,
-    `Intended Investment: ${formattedAmount}`,
-    `Submitted At: ${formattedDate}`,
-  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 24px 28px; border-radius: 12px 12px 0 0;">
+        <h2 style="color: #fff; margin: 0; font-size: 18px;">🏡 New Letter of Intent</h2>
+      </div>
+      <div style="background: #fff; padding: 24px 28px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+        <p style="color: #374151; font-size: 14px; line-height: 1.6; margin-top: 0;">A new Letter of Intent has been submitted on the Sonno Homes platform.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Investor</td><td style="padding: 8px 0; font-weight: 600; color: #111827; font-size: 13px;">${investorName}</td></tr>
+          <tr><td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Offering</td><td style="padding: 8px 0; font-weight: 600; color: #111827; font-size: 13px;">${offeringTitle}</td></tr>
+          <tr><td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Intended Investment</td><td style="padding: 8px 0; font-weight: 600; color: #111827; font-size: 13px;">${formattedAmount}</td></tr>
+          <tr><td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Submitted</td><td style="padding: 8px 0; font-weight: 600; color: #111827; font-size: 13px;">${formattedDate}</td></tr>
+        </table>
+        <p style="color: #6b7280; font-size: 12px; margin-bottom: 0;">Log in to the admin panel to review and take action.</p>
+      </div>
+    </div>
+  `;
 
-  // TODO: Add production SMTP transport via nodemailer when ready.
-  // For now, all environments use console logging.
-  if (!process.env.SMTP_HOST) {
-    console.log(`[EmailService] LOI Notification`);
+  const text = `New LOI Submitted\n\nInvestor: ${investorName}\nOffering: ${offeringTitle}\nIntended Investment: ${formattedAmount}\nSubmitted: ${formattedDate}\n\nLog in to the admin panel to review.`;
+
+  if (!resend) {
+    console.log(`[EmailService] LOI Notification (no RESEND_API_KEY — logging only)`);
     console.log(`  To: ${adminEmails.join(", ")}`);
     console.log(`  Subject: ${subject}`);
-    console.log(`  Body:\n${body}`);
+    console.log(`  Body:\n${text}`);
     return;
   }
 
-  // Production path — requires nodemailer and SMTP env vars.
-  // Uncomment and install nodemailer when SMTP is configured:
-  // const nodemailer = await import("nodemailer");
-  // const transporter = nodemailer.createTransport({
-  //   host: process.env.SMTP_HOST,
-  //   port: Number(process.env.SMTP_PORT) || 587,
-  //   secure: process.env.SMTP_SECURE === "true",
-  //   auth: {
-  //     user: process.env.SMTP_USER,
-  //     pass: process.env.SMTP_PASS,
-  //   },
-  // });
-  //
-  // await transporter.sendMail({
-  //   from: process.env.SMTP_FROM || "noreply@sonnohomes.com",
-  //   to: adminEmails,
-  //   subject,
-  //   text: body,
-  // });
-
-  // Fallback: log until nodemailer is installed
-  console.log(`[EmailService] LOI Notification (SMTP configured but nodemailer not installed)`);
-  console.log(`  To: ${adminEmails.join(", ")}`);
-  console.log(`  Subject: ${subject}`);
-  console.log(`  Body:\n${body}`);
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: adminEmails,
+      subject,
+      html,
+      text,
+    });
+    console.log(`[EmailService] LOI notification sent to ${adminEmails.join(", ")}`);
+  } catch (err) {
+    console.error(`[EmailService] Failed to send LOI notification:`, err);
+  }
 }
 
 export interface FundReportNotificationPayload {
   fundName: string;
-  quarterLabel: string; // e.g. "Q2 2025"
+  quarterLabel: string;
   investorEmails: string[];
 }
 
-/**
- * Sends a fund report publication notification to all fund investors.
- * Follows the same fire-and-forget pattern as sendLOINotification.
- * In dev mode (no SMTP config), logs to console instead of sending.
- */
-export async function sendFundReportNotification(
-  payload: FundReportNotificationPayload
-): Promise<void> {
+export async function sendFundReportNotification(payload: FundReportNotificationPayload): Promise<void> {
   const { fundName, quarterLabel, investorEmails } = payload;
-
   if (investorEmails.length === 0) return;
 
   const subject = `Fund Report Published: ${fundName} — ${quarterLabel}`;
-  const body = [
-    `A new quarterly fund report has been published.`,
-    ``,
-    `Fund: ${fundName}`,
-    `Quarter: ${quarterLabel}`,
-    ``,
-    `Log in to view the full report and performance details.`,
-  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 24px 28px; border-radius: 12px 12px 0 0;">
+        <h2 style="color: #fff; margin: 0; font-size: 18px;">📊 Fund Report Published</h2>
+      </div>
+      <div style="background: #fff; padding: 24px 28px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">
+        <p style="color: #374151; font-size: 14px; line-height: 1.6; margin-top: 0;">A new quarterly fund report has been published.</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr><td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Fund</td><td style="padding: 8px 0; font-weight: 600; color: #111827; font-size: 13px;">${fundName}</td></tr>
+          <tr><td style="padding: 8px 0; color: #6b7280; font-size: 13px;">Quarter</td><td style="padding: 8px 0; font-weight: 600; color: #111827; font-size: 13px;">${quarterLabel}</td></tr>
+        </table>
+        <p style="color: #6b7280; font-size: 12px; margin-bottom: 0;">Log in to your investor portal to view the full report and performance details.</p>
+      </div>
+    </div>
+  `;
 
-  try {
-    if (!process.env.SMTP_HOST) {
-      console.log(`[EmailService] Fund Report Notification`);
-      console.log(`  To: ${investorEmails.join(", ")}`);
-      console.log(`  Subject: ${subject}`);
-      console.log(`  Body:\n${body}`);
-      return;
-    }
+  const text = `Fund Report Published\n\nFund: ${fundName}\nQuarter: ${quarterLabel}\n\nLog in to view the full report.`;
 
-    // Production path — requires nodemailer and SMTP env vars.
-    // Uncomment and install nodemailer when SMTP is configured.
-    console.log(`[EmailService] Fund Report Notification (SMTP configured but nodemailer not installed)`);
+  if (!resend) {
+    console.log(`[EmailService] Fund Report Notification (no RESEND_API_KEY — logging only)`);
     console.log(`  To: ${investorEmails.join(", ")}`);
     console.log(`  Subject: ${subject}`);
-    console.log(`  Body:\n${body}`);
+    console.log(`  Body:\n${text}`);
+    return;
+  }
+
+  try {
+    // Resend free tier: send to each individually (batch not available on free)
+    for (const email of investorEmails) {
+      await resend.emails.send({
+        from: FROM_EMAIL,
+        to: [email],
+        subject,
+        html,
+        text,
+      });
+    }
+    console.log(`[EmailService] Fund report notification sent to ${investorEmails.length} investor(s)`);
   } catch (err) {
-    console.error(`[EmailService] Failed to send fund report notification for ${fundName}:`, err);
+    console.error(`[EmailService] Failed to send fund report notification:`, err);
   }
 }
-
